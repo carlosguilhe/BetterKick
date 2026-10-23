@@ -14,7 +14,7 @@ android {
         minSdk = 26
         targetSdk = 34
         versionCode = 6
-        versionName = "1.5"
+        versionName = "1.0"
     }
 
     // Chave própria de assinatura: fica fora do projeto (C:\Users\Carlos\BetterKickKeys), nunca vai para o GitHub.
