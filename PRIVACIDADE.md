@@ -17,6 +17,7 @@ Tudo isto é guardado **só no seu celular** e some quando você desinstala o ap
 - **Kick** (`kick.com`, `web.kick.com`, a rede de entrega de vídeo e imagens da Kick e, no login com Google, as páginas de login do Google exibidas pela Kick): para listar lives, tocar vídeo, mostrar o chat e as ações da sua conta. Esses serviços têm as próprias políticas de privacidade.
 - **GitHub** (`api.github.com`): para saber se há versão nova e baixar a atualização. O GitHub recebe o endereço de IP da requisição, como em qualquer acesso.
 - **Cloudflare** (`speed.cloudflare.com`): **somente** quando você toca em "Testar velocidade".
+- **TVs da sua rede (DLNA)**: **somente** quando você toca no botão de transmitir. O app procura aparelhos na rede local do seu Wi-Fi e, se você escolher um, envia a ele o endereço da live para a TV baixar o vídeo. Nada disso sai da sua rede local.
 
 Não há outros destinos. Não há SDK de rastreamento, de anúncios ou de análise.
 
@@ -26,6 +27,7 @@ Não há outros destinos. Não há SDK de rastreamento, de anúncios ou de anál
 - **Notificações**: avisar quando um canal entra ao vivo e mostrar os controles de mídia.
 - **Serviço em primeiro plano (mídia)**: manter o áudio tocando com a tela apagada.
 - **Instalar pacotes**: só para instalar as atualizações do próprio app, depois que você confirma.
+- **Estado do Wi-Fi e multicast**: só para achar TVs na rede ao transmitir. O app também aceita conexões sem criptografia (HTTP), porque as TVs da rede local falam assim; todo o resto usa HTTPS.
 
 ## Seus controles
 

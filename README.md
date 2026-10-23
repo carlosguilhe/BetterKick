@@ -38,6 +38,7 @@
 - **Chat** abaixo do vídeo, ao lado (paisagem) ou **sobre o vídeo**, com gestos de brilho e volume na tela cheia.
 - **Reconexão automática** quando a internet cai e volta.
 - **Lives lado a lado**: duas lives ao mesmo tempo (segure um card → "Assistir lado a lado"), com som em uma de cada vez.
+- **Transmitir para a TV (DLNA)**: botão no player que acha TVs na rede e manda a live para elas, sem serviços do Google. Depende de a TV aceitar vídeo HLS por DLNA.
 - **Economia de dados**: no 4G/5G o modo automático não passa de 480p.
 - Botão de **pausar dentro do Picture-in-Picture**.
 

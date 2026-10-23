@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.ChatBubble
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.FullscreenExit
+import androidx.compose.material.icons.outlined.Cast
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.PictureInPictureAlt
 import android.app.PictureInPictureParams
@@ -411,6 +412,7 @@ private fun PlayerContent(
     var controlsVisible by remember { mutableStateOf(true) }
     var interactionTick by remember { mutableIntStateOf(0) }
     var menuOpen by remember { mutableStateOf(false) }
+    var castOpen by remember { mutableStateOf(false) }
     var droppedFrames by remember { mutableIntStateOf(0) }
     var rebuffers by remember { mutableIntStateOf(0) }
     var recentStalls by remember { mutableIntStateOf(0) }
@@ -565,8 +567,8 @@ private fun PlayerContent(
     }
 
     // Esconde os controles sozinho depois de alguns segundos tocando.
-    LaunchedEffect(controlsVisible, interactionTick, playing, menuOpen) {
-        if (controlsVisible && playing && !menuOpen) {
+    LaunchedEffect(controlsVisible, interactionTick, playing, menuOpen, castOpen) {
+        if (controlsVisible && playing && !menuOpen && !castOpen) {
             delay(3_500)
             controlsVisible = false
         }
@@ -786,6 +788,26 @@ private fun PlayerContent(
                                     Icons.Default.Star,
                                     "Favorito",
                                     tint = if (favorite) KickGreen else Color(0x99FFFFFF),
+                                )
+                            }
+                            // Transmitir para a TV (DLNA): toque de novo para parar.
+                            val casting = DlnaCast.renderer
+                            IconButton(onClick = {
+                                interactionTick++
+                                if (casting != null) followScope.launch { DlnaCast.stop() } else castOpen = true
+                            }) {
+                                Icon(
+                                    Icons.Outlined.Cast,
+                                    if (casting != null) tr("Parar transmissão para %s").format(casting.name) else tr("Transmitir para a TV"),
+                                    tint = if (casting != null) KickGreen else Color.White,
+                                )
+                            }
+                            if (castOpen) {
+                                CastDialog(
+                                    streamUrl = channel.playbackUrl,
+                                    title = channel.title.ifBlank { channel.username },
+                                    onStarted = { player.pause() },
+                                    onDismiss = { castOpen = false },
                                 )
                             }
                             IconButton(onClick = onEnterPip) {
@@ -1064,11 +1086,22 @@ private fun ChatPanel(slug: String, modifier: Modifier) {
                 settings.userAgentString = settings.userAgentString.replace("; wv", "")
                 layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
                 webViewClient = object : android.webkit.WebViewClient() {
-                    // Mantém a navegação dentro do chat da Kick.
+                    // Mantém o chat da Kick no lugar: um link tocado no chat não troca a página do chat.
                     override fun shouldOverrideUrlLoading(
                         view: android.webkit.WebView,
                         request: android.webkit.WebResourceRequest,
-                    ) = !(request.url.host?.endsWith("kick.com") ?: false)
+                    ): Boolean {
+                        val uri = request.url
+                        val host = uri.host.orEmpty()
+                        val kick = host.endsWith("kick.com")
+                        if (!request.isForMainFrame || !request.hasGesture()) return !kick
+                        if (kick && uri.path.orEmpty().startsWith("/popout/")) return false
+                        // Canal da Kick abre aqui no app; qualquer outro link, no navegador.
+                        val open = Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        if (host == "kick.com" || host == "www.kick.com") open.setPackage(view.context.packageName)
+                        runCatching { view.context.startActivity(open) }
+                        return true
+                    }
                 }
                 addJavascriptInterface(ChatWeb.Bridge(), "NewKick")
                 ChatWeb.webView = this

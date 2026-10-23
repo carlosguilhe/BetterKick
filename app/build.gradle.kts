@@ -13,8 +13,8 @@ android {
         applicationId = "com.newkick.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 7
-        versionName = "1.1"
+        versionCode = 8
+        versionName = "1.2"
     }
 
     // Chave própria de assinatura: fica fora do projeto (C:\Users\Carlos\BetterKickKeys), nunca vai para o GitHub.

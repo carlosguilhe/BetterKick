@@ -47,6 +47,13 @@ private val DarkColors = darkColorScheme(
     error = Color(0xFFFF6B6B),
 )
 
+/** Preto puro: economiza bateria em telas OLED. */
+private val AmoledColors = DarkColors.copy(
+    background = Color.Black,
+    surface = Color(0xFF0A0C0D),
+    surfaceVariant = Color(0xFF15191B),
+)
+
 private val LightColors = lightColorScheme(
     primary = Color(0xFF2DAA0A),
     onPrimary = Color.White,
@@ -79,6 +86,7 @@ fun NewKickTheme(forceDark: Boolean = false, content: @Composable () -> Unit) {
                 error = if (dark) Color(0xFFFF6B6B) else Color(0xFFC62828),
             )
         }
+        dark && !forceDark && ThemeState.mode == "black" -> AmoledColors
         dark -> DarkColors
         else -> LightColors
     }

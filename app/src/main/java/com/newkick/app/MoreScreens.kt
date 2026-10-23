@@ -221,7 +221,7 @@ fun SettingsScreen(onBack: () -> Unit) {
         }
 
         SettingsSection("APARÊNCIA")
-        ChoiceRow("Tema", listOf("Escuro" to "dark", "Claro" to "light", "Sistema" to "system"), ThemeState.mode) {
+        ChoiceRow("Tema", listOf("Escuro" to "dark", "Preto" to "black", "Claro" to "light", "Sistema" to "system"), ThemeState.mode) {
             haptics.tick()
             ThemeState.mode = it
             prefs.themeMode = it
