@@ -9,7 +9,17 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.PorterDuff
+import android.graphics.PorterDuffXfermode
 import android.util.Log
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
@@ -47,7 +57,7 @@ class FavoritesWorker(context: Context, params: WorkerParameters) : CoroutineWor
         for (f in followed.orEmpty()) {
             if (f.isLive) {
                 // Na primeira checagem só registra quem já estava ao vivo, sem encher de avisos.
-                if (state.add(f.slug) && !baseline && f.slug !in muted) notify(f.slug, f.username, f.title.ifBlank { f.category.orEmpty() })
+                if (state.add(f.slug) && !baseline && f.slug !in muted) notify(f.slug, f.username, f.title.ifBlank { f.category.orEmpty() }, f.avatar)
             } else {
                 state.remove(f.slug)
             }
@@ -60,7 +70,7 @@ class FavoritesWorker(context: Context, params: WorkerParameters) : CoroutineWor
             if (slug in followedSlugs) continue
             val channel = runCatching { KickApi.channel(slug) }.getOrNull() ?: continue // erro de rede: mantém o estado
             if (channel.isLive) {
-                if (state.add(slug) && slug !in muted) notify(slug, channel.username, channel.title.ifBlank { channel.category.orEmpty() })
+                if (state.add(slug) && slug !in muted) notify(slug, channel.username, channel.title.ifBlank { channel.category.orEmpty() }, channel.avatar)
             } else {
                 state.remove(slug)
             }
@@ -70,7 +80,7 @@ class FavoritesWorker(context: Context, params: WorkerParameters) : CoroutineWor
         return Result.success()
     }
 
-    private fun notify(slug: String, username: String, text: String) {
+    private suspend fun notify(slug: String, username: String, text: String, avatar: String?) {
         val context = applicationContext
         // Horário silencioso: não avisa (a live que começou nesse período não gera aviso depois).
         if (Prefs(context).inQuietHours()) return
@@ -98,8 +108,11 @@ class FavoritesWorker(context: Context, params: WorkerParameters) : CoroutineWor
             Intent(context, LiveActionReceiver::class.java).setAction(LiveActionReceiver.ACTION_MUTE).putExtra(LiveActionReceiver.EXTRA_SLUG, slug),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
+        // Foto de perfil do canal no aviso (redonda). Sem rede ou sem foto, segue só com o ícone do app.
+        val photo = avatar?.let { loadCircularAvatar(it) }
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_kick_k)
+            .apply { if (photo != null) setLargeIcon(photo) }
             .setContentTitle(tr("%s está ao vivo").format(username))
             .setContentText(text)
             .setContentIntent(pending)
@@ -119,6 +132,26 @@ class FavoritesWorker(context: Context, params: WorkerParameters) : CoroutineWor
         val manager2 = NotificationManagerCompat.from(context)
         manager2.notify(slug.hashCode(), notification)
         manager2.notify(SUMMARY_ID, summary)
+    }
+
+    /** Baixa a foto do canal e recorta em círculo (192 px) para o ícone grande do aviso. */
+    private suspend fun loadCircularAvatar(url: String): Bitmap? = withContext(Dispatchers.IO) {
+        runCatching {
+            val client = OkHttpClient.Builder().connectTimeout(6, TimeUnit.SECONDS).readTimeout(8, TimeUnit.SECONDS).build()
+            val bytes = client.newCall(Request.Builder().url(url).build()).execute().use { it.body?.bytes() } ?: return@runCatching null
+            val source = BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return@runCatching null
+            val size = 192
+            val side = minOf(source.width, source.height)
+            val square = Bitmap.createBitmap(source, (source.width - side) / 2, (source.height - side) / 2, side, side)
+            val scaled = Bitmap.createScaledBitmap(square, size, size, true)
+            val out = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+            val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+            val canvas = Canvas(out)
+            canvas.drawCircle(size / 2f, size / 2f, size / 2f, paint)
+            paint.xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC_IN)
+            canvas.drawBitmap(scaled, 0f, 0f, paint)
+            out
+        }.getOrNull()
     }
 
     companion object {
