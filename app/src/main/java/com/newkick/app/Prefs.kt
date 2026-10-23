@@ -320,6 +320,16 @@ class Prefs(context: Context) {
         get() = sp.getFloat("vod_speed", 1f)
         set(v) = sp.edit().putFloat("vod_speed", v).apply()
 
+    /** Tamanho do texto do chat, em % (85 a 150). */
+    var chatZoom: Int
+        get() = sp.getInt("chat_zoom", 100)
+        set(v) = sp.edit().putInt("chat_zoom", v).apply()
+
+    /** Com bateria abaixo de 20% (sem carregar), o modo automático não passa de 480p. */
+    var batterySaver: Boolean
+        get() = sp.getBoolean("battery_saver", false)
+        set(v) = sp.edit().putBoolean("battery_saver", v).apply()
+
     // ---- Seções da Home e ordem de Seguindo ----
 
     fun homeSection(name: String): Boolean = sp.getBoolean("home_$name", true)

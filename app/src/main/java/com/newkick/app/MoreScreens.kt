@@ -150,6 +150,8 @@ fun SettingsScreen(onBack: () -> Unit) {
     var checking by remember { mutableStateOf(false) }
     var vibration by remember { mutableStateOf(prefs.haptics) }
     var dataSaver by remember { mutableStateOf(prefs.dataSaver) }
+    var batterySaver by remember { mutableStateOf(prefs.batterySaver) }
+    var chatZoom by remember { mutableIntStateOf(prefs.chatZoom) }
     var uiLang by remember { mutableStateOf(prefs.uiLang) }
     val haptics = rememberHaptics()
 
@@ -212,6 +214,14 @@ fun SettingsScreen(onBack: () -> Unit) {
         SwitchRow("Economia de dados", "No 4G/5G, o modo automático não passa de 480p", dataSaver) {
             dataSaver = it
             prefs.dataSaver = it
+        }
+        SwitchRow("Economia de bateria", "Com menos de 20% de bateria (sem carregar), não passa de 480p", batterySaver) {
+            batterySaver = it
+            prefs.batterySaver = it
+        }
+        ChoiceRow("Tamanho do texto do chat", listOf("Pequeno" to 85, "Normal" to 100, "Grande" to 125, "Maior" to 150), chatZoom) {
+            chatZoom = it
+            prefs.chatZoom = it
         }
         SwitchRow("Gestos de brilho e volume", "Arraste na tela cheia", gestures) {
             gestures = it

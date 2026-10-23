@@ -208,7 +208,10 @@ fun PlayerScreen(slug: String, onClose: () -> Unit, onMinimize: () -> Unit, onOf
             LoadState.Ready(KickApi.channel(slug)).also {
                 val prefs = Prefs(context)
                 prefs.addRecent(it.channel.slug)
-                if (it.channel.isLive) prefs.addHistory(it.channel.slug, it.channel.username, it.channel.category)
+                if (it.channel.isLive) {
+                    prefs.addHistory(it.channel.slug, it.channel.username, it.channel.category)
+                    RecentShortcuts.update(context)
+                }
             }
         } catch (e: Exception) {
             LoadState.Failed(e.message ?: "Falha ao carregar o canal.")
@@ -311,7 +314,8 @@ internal fun createPlayer(
     // Economia de dados: em rede móvel, o modo automático não passa de 480p (escolher uma qualidade à mão ainda vale).
     val saveData = Prefs(context).dataSaver &&
         context.getSystemService(android.net.ConnectivityManager::class.java)?.isActiveNetworkMetered == true
-    val cap = if (capHeight > 0) capHeight else if (saveData) 480 else 0
+    val batterySaving = Prefs(context).batterySaver && isBatteryLow(context)
+    val cap = if (capHeight > 0) capHeight else if (saveData || batterySaving) 480 else 0
     val trackSelector = DefaultTrackSelector(context, AdaptiveTrackSelection.Factory(increaseMs, decreaseMs, increaseMs, 0.75f)).apply {
         parameters = buildUponParameters()
             .setViewportSize(Int.MAX_VALUE, Int.MAX_VALUE, false)
@@ -1159,6 +1163,8 @@ private fun ChatPanel(slug: String, modifier: Modifier) {
                 setBackgroundColor(0xFF0B0E0F.toInt())
                 settings.javaScriptEnabled = true
                 settings.domStorageEnabled = true
+                // Tamanho do texto do chat (Configurações → Reprodução).
+                settings.textZoom = Prefs(ctx).chatZoom
                 // O user-agent padrão do WebView ("; wv") é barrado pela proteção anti-bot da Kick.
                 settings.userAgentString = settings.userAgentString.replace("; wv", "")
                 layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
@@ -1205,4 +1211,13 @@ private fun PauseGlyph() {
 private fun formatElapsed(ms: Long): String {
     val minutes = (ms / 60_000).coerceAtLeast(0)
     return if (minutes < 60) "$minutes min" else "${minutes / 60}h %02dmin".format(minutes % 60)
+}
+/** Bateria abaixo de 20% e sem carregar. */
+internal fun isBatteryLow(context: Context): Boolean {
+    val intent = context.registerReceiver(null, android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED)) ?: return false
+    val level = intent.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1)
+    val scale = intent.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, -1)
+    val status = intent.getIntExtra(android.os.BatteryManager.EXTRA_STATUS, -1)
+    val charging = status == android.os.BatteryManager.BATTERY_STATUS_CHARGING || status == android.os.BatteryManager.BATTERY_STATUS_FULL
+    return level >= 0 && scale > 0 && level * 100 / scale < 20 && !charging
 }

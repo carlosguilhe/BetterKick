@@ -369,7 +369,8 @@ private fun HomeTab(
     val context = LocalContext.current
     val prefs = remember { Prefs(context) }
     val favorites = remember { prefs.favorites() }
-    val continueItems = remember(refreshTick) { prefs.continueWatching().take(8) }
+    var continueTick by remember { mutableIntStateOf(0) }
+    val continueItems = remember(refreshTick, continueTick) { prefs.continueWatching().take(8) }
     val recents = remember { prefs.recents() }
     val listState = rememberLazyListState()
     LaunchedEffect(scrollSignal) { if (scrollSignal > 0) listState.animateScrollToItem(0) }
@@ -550,7 +551,12 @@ private fun HomeTab(
                         item { SectionTitle("Continuar assistindo") }
                         item {
                             LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                items(continueItems, key = { "c_" + it.url }) { progress -> ContinueCard(progress) }
+                                items(continueItems, key = { "c_" + it.url }) { progress ->
+                                    ContinueCard(progress) {
+                                        prefs.clearVodPosition(progress.url)
+                                        continueTick++
+                                    }
+                                }
                             }
                         }
                     }
@@ -607,7 +613,7 @@ private fun HomeTab(
 
 /** Um clipe ou transmissão que você parou no meio: miniatura com a barra verde do quanto já viu. */
 @Composable
-private fun ContinueCard(progress: VodProgress) {
+private fun ContinueCard(progress: VodProgress, onRemove: () -> Unit) {
     val openVod = LocalOpenVod.current
     Column(
         Modifier
@@ -622,6 +628,17 @@ private fun ContinueCard(progress: VodProgress) {
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant),
             )
+            // X: tira da lista "Continuar assistindo".
+            Box(
+                Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(6.dp)
+                    .size(26.dp)
+                    .clip(CircleShape)
+                    .background(Color(0x99000000))
+                    .clickable(onClick = onRemove),
+                contentAlignment = Alignment.Center,
+            ) { Icon(Icons.Default.Close, tr("Remover"), tint = Color.White, modifier = Modifier.size(15.dp)) }
             if (progress.duration > 0) {
                 val fraction = (progress.position.toFloat() / progress.duration).coerceIn(0f, 1f)
                 Box(Modifier.align(Alignment.BottomStart).fillMaxWidth().height(4.dp).background(Color(0x66000000)))
