@@ -183,6 +183,8 @@ private fun App(linkedSlug: MutableState<String?>, linkedTab: MutableState<Strin
         )
     }
     var vodBack by rememberSaveable { mutableStateOf("home") }
+    // De onde veio a página do canal: se foi do player, o voltar retorna a ele (a live segue tocando).
+    var channelBack by rememberSaveable { mutableStateOf("home") }
     var tabName by rememberSaveable { mutableStateOf(MainTab.HOME.name) }
     val tab = MainTab.valueOf(tabName)
     var crashReport by remember { mutableStateOf(CrashLogger.pending(context)) }
@@ -227,6 +229,12 @@ private fun App(linkedSlug: MutableState<String?>, linkedTab: MutableState<Strin
 
     Box(Modifier.fillMaxSize()) {
         // Troca de tela com transição: telas de vídeo/canal crescem e esmaecem; o resto só esmaece.
+        androidx.compose.runtime.CompositionLocalProvider(
+            LocalOpenChannel provides { slug: String ->
+                channelBack = if (route.startsWith("player:")) route else "home"
+                route = "channel:$slug"
+            },
+        ) {
         AnimatedContent(
             targetState = route,
             transitionSpec = {
@@ -253,7 +261,10 @@ private fun App(linkedSlug: MutableState<String?>, linkedTab: MutableState<Strin
                             route = "home"
                         },
                         // Canal offline: mostra a página dele (clipes e transmissões anteriores).
-                        onOffline = { route = "channel:$it" },
+                        onOffline = {
+                            channelBack = "home"
+                            route = "channel:$it"
+                        },
                     )
                 }
                 current.startsWith("multi:") -> DarkScreen {
@@ -268,7 +279,7 @@ private fun App(linkedSlug: MutableState<String?>, linkedTab: MutableState<Strin
                     val slug = current.removePrefix("channel:")
                     ChannelScreen(
                         slug = slug,
-                        onBack = { route = "home" },
+                        onBack = { route = channelBack },
                         onWatchLive = { route = "player:$slug" },
                         onPlay = { url, title ->
                             vodBack = "channel:$slug"
@@ -306,7 +317,10 @@ private fun App(linkedSlug: MutableState<String?>, linkedTab: MutableState<Strin
                     tab = tab,
                     onTab = { tabName = it.name },
                     onOpen = { route = "player:$it" },
-                    onOpenChannel = { route = "channel:$it" },
+                    onOpenChannel = {
+                        channelBack = "home"
+                        route = "channel:$it"
+                    },
                     onLogin = { route = "login" },
                     onOpenSite = { url, title -> route = "site:$title|$url" },
                     onOpenSettings = { route = "settings" },
@@ -315,6 +329,7 @@ private fun App(linkedSlug: MutableState<String?>, linkedTab: MutableState<Strin
                     onOpenMulti = { a, b -> route = "multi:$a|$b" },
                 )
             }
+        }
         }
         // Só aparece na tela inicial, para não interromper uma live.
         update?.takeIf { route == "home" }?.let { release ->

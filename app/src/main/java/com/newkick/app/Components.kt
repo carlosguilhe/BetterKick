@@ -10,6 +10,10 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.composed
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -226,9 +230,13 @@ fun CategoryCard(cat: Category, modifier: Modifier = Modifier, onClick: () -> Un
     }
 }
 
+/** Abre a página do canal (clipes e transmissões anteriores). Fornecido pelo App; padrão não faz nada. */
+val LocalOpenChannel = androidx.compose.runtime.staticCompositionLocalOf<(String) -> Unit> { {} }
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun LiveCard(item: LiveItem, onLongClick: (() -> Unit)? = null, onClick: () -> Unit) {
+    val openChannel = LocalOpenChannel.current
     Column(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).combinedClickable(onClick = onClick, onLongClick = onLongClick, role = androidx.compose.ui.semantics.Role.Button, onLongClickLabel = tr("Mais ações"))) {
         Box {
             AsyncImage(
@@ -248,7 +256,8 @@ fun LiveCard(item: LiveItem, onLongClick: (() -> Unit)? = null, onClick: () -> U
                 model = item.avatar,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.size(40.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant),
+                modifier = Modifier.size(40.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant)
+                    .clickable { openChannel(item.slug) },
             )
             Column(Modifier.padding(start = 12.dp).weight(1f)) {
                 Text(
@@ -286,6 +295,7 @@ fun LiveBadge(viewers: Int, modifier: Modifier = Modifier) {
 @Composable
 @OptIn(ExperimentalFoundationApi::class)
 fun FollowedPreviewCard(ch: FollowedChannel, thumbnail: String?, modifier: Modifier = Modifier, onLongClick: (() -> Unit)? = null, onClick: () -> Unit) {
+    val openChannel = LocalOpenChannel.current
     Column(modifier = modifier.clip(RoundedCornerShape(14.dp)).combinedClickable(onClick = onClick, onLongClick = onLongClick, role = androidx.compose.ui.semantics.Role.Button, onLongClickLabel = tr("Mais ações"))) {
         Box {
             AsyncImage(
@@ -305,7 +315,8 @@ fun FollowedPreviewCard(ch: FollowedChannel, thumbnail: String?, modifier: Modif
                 model = ch.avatar,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.size(30.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant),
+                modifier = Modifier.size(30.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant)
+                    .clickable { openChannel(ch.slug) },
             )
             Column(Modifier.padding(start = 8.dp)) {
                 Text(ch.username, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -323,6 +334,7 @@ fun FollowedPreviewCard(ch: FollowedChannel, thumbnail: String?, modifier: Modif
 @Composable
 @OptIn(ExperimentalFoundationApi::class)
 fun FollowedRow(ch: FollowedChannel, onLongClick: (() -> Unit)? = null, onClick: () -> Unit) {
+    val openChannel = LocalOpenChannel.current
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).combinedClickable(onClick = onClick, onLongClick = onLongClick, role = androidx.compose.ui.semantics.Role.Button, onLongClickLabel = tr("Mais ações")).padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -331,7 +343,8 @@ fun FollowedRow(ch: FollowedChannel, onLongClick: (() -> Unit)? = null, onClick:
             model = ch.avatar,
             contentDescription = null,
             contentScale = ContentScale.Crop,
-            modifier = Modifier.size(48.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant),
+            modifier = Modifier.size(48.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant)
+                .clickable { openChannel(ch.slug) },
         )
         Column(Modifier.padding(start = 12.dp).weight(1f)) {
             Text(ch.username, fontWeight = FontWeight.Bold)
@@ -465,6 +478,81 @@ fun rememberIsOnline(): Boolean {
         onDispose { runCatching { cm?.unregisterNetworkCallback(callback) } }
     }
     return online
+}
+
+/**
+ * Barra de progresso verde: mostra quanto já passou (verde), quanto já carregou (cinza claro) e o que falta.
+ * Toque ou arraste para ir para outro ponto; o pulo só acontece ao soltar. [dragLabel] é o texto que aparece
+ * sobre a barra enquanto você arrasta (recebe a posição em ms).
+ */
+@Composable
+fun GreenSeekBar(
+    position: Long,
+    buffered: Long,
+    duration: Long,
+    onSeek: (Long) -> Unit,
+    modifier: Modifier = Modifier,
+    dragLabel: ((Long) -> String)? = null,
+) {
+    val green = KickGreen
+    var dragFraction by remember { mutableStateOf<Float?>(null) }
+    val safeDuration = duration.coerceAtLeast(1L)
+    val playedFraction = dragFraction ?: (position.toFloat() / safeDuration).coerceIn(0f, 1f)
+    val bufferedFraction = (buffered.toFloat() / safeDuration).coerceIn(0f, 1f)
+    Box(modifier.height(28.dp)) {
+        androidx.compose.foundation.Canvas(
+            Modifier
+                .fillMaxSize()
+                .pointerInput(duration) {
+                    detectTapGestures { offset ->
+                        onSeek(((offset.x / size.width).coerceIn(0f, 1f) * safeDuration).toLong())
+                    }
+                }
+                .pointerInput(duration) {
+                    detectHorizontalDragGestures(
+                        onDragStart = { dragFraction = (it.x / size.width).coerceIn(0f, 1f) },
+                        onHorizontalDrag = { change, _ ->
+                            change.consume()
+                            dragFraction = (change.position.x / size.width).coerceIn(0f, 1f)
+                        },
+                        onDragEnd = {
+                            dragFraction?.let { onSeek((it * safeDuration).toLong()) }
+                            dragFraction = null
+                        },
+                        onDragCancel = { dragFraction = null },
+                    )
+                },
+        ) {
+            val track = 4.dp.toPx()
+            val y = size.height / 2
+            val round = androidx.compose.ui.geometry.CornerRadius(track / 2, track / 2)
+            fun bar(fraction: Float, color: Color) = drawRoundRect(
+                color = color,
+                topLeft = androidx.compose.ui.geometry.Offset(0f, y - track / 2),
+                size = androidx.compose.ui.geometry.Size(size.width * fraction, track),
+                cornerRadius = round,
+            )
+            bar(1f, Color(0x4DFFFFFF))
+            bar(bufferedFraction, Color(0x80FFFFFF))
+            bar(playedFraction, green)
+            drawCircle(green, radius = (if (dragFraction != null) 9.dp else 6.dp).toPx(), center = androidx.compose.ui.geometry.Offset(size.width * playedFraction, y))
+        }
+        val dragging = dragFraction
+        if (dragging != null && dragLabel != null) {
+            Text(
+                dragLabel((dragging * safeDuration).toLong()),
+                color = Color.White,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .offset(y = (-26).dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(Color(0xCC000000))
+                    .padding(horizontal = 8.dp, vertical = 3.dp),
+            )
+        }
+    }
 }
 
 /** Vibração curta (respeita a opção "Vibração" das Configurações). */

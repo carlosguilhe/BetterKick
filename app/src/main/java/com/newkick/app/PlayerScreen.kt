@@ -391,6 +391,7 @@ private fun PlayerContent(
 
     val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
     val haptics = rememberHaptics()
+    val openChannel = LocalOpenChannel.current
     val toggleFavorite = {
         haptics.confirm()
         favorite = prefs.toggleFavorite(channel.slug)
@@ -413,6 +414,9 @@ private fun PlayerContent(
     var interactionTick by remember { mutableIntStateOf(0) }
     var menuOpen by remember { mutableStateOf(false) }
     var castOpen by remember { mutableStateOf(false) }
+    var seekPosition by remember { mutableLongStateOf(0L) }
+    var seekBuffered by remember { mutableLongStateOf(0L) }
+    var seekDuration by remember { mutableLongStateOf(0L) }
     var droppedFrames by remember { mutableIntStateOf(0) }
     var rebuffers by remember { mutableIntStateOf(0) }
     var recentStalls by remember { mutableIntStateOf(0) }
@@ -563,6 +567,17 @@ private fun PlayerContent(
                 Log.d("NewKickStats", statsText.replace('\n', ' '))
             }
             delay(1_000)
+        }
+    }
+
+    // Posição para a barra de progresso (só enquanto os controles aparecem).
+    LaunchedEffect(player, controlsVisible) {
+        while (controlsVisible) {
+            val duration = player.duration
+            seekDuration = if (duration == C.TIME_UNSET) 0L else duration
+            seekPosition = player.currentPosition
+            seekBuffered = player.bufferedPosition
+            delay(250)
         }
     }
 
@@ -899,8 +914,26 @@ private fun PlayerContent(
                             )
                         }
 
+                        // Barra de progresso verde: arraste para voltar no que a live ainda guarda (e solte para pular).
+                        // O fim da barra é o ao vivo (na distância escolhida), então a bolinha fica na ponta quando você está em dia.
+                        val barDuration = (seekDuration - latencyMs).coerceAtLeast(0L)
+                        if (barDuration > 5_000) {
+                            GreenSeekBar(
+                                position = seekPosition.coerceAtMost(barDuration),
+                                buffered = seekBuffered.coerceAtMost(barDuration),
+                                duration = barDuration,
+                                onSeek = {
+                                    // Soltou no final: volta ao ao vivo de verdade.
+                                    if (it >= barDuration - 1_000) player.seekToDefaultPosition() else player.seekTo(it)
+                                    interactionTick++
+                                },
+                                dragLabel = { "−" + formatDuration(((barDuration - it) / 1000).coerceAtLeast(0)) },
+                                modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(horizontal = 6.dp),
+                            )
+                        }
                         Row(
-                            modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(12.dp),
+                            modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth()
+                                .padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = if (barDuration > 5_000) 24.dp else 12.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
@@ -1003,9 +1036,11 @@ private fun PlayerContent(
                     model = channel.avatar,
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
-                    modifier = Modifier.padding(end = 12.dp).size(44.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant),
+                    modifier = Modifier.padding(end = 12.dp).size(44.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant)
+                        .clickable { openChannel(channel.slug) },
                 )
-                Column(Modifier.weight(1f)) {
+                // Foto ou nome: abre a página do canal (clipes e transmissões); a live segue no mini player.
+                Column(Modifier.weight(1f).clickable { openChannel(channel.slug) }) {
                     Text(channel.title, fontWeight = FontWeight.Bold, fontSize = 15.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     Text(
                         listOfNotNull(

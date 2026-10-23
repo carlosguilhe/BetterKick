@@ -438,7 +438,7 @@ fun OnboardingScreen(onDone: () -> Unit) {
 
 // ───────────────────────────── Página do canal ─────────────────────────────
 
-private fun formatDuration(totalSeconds: Long): String {
+internal fun formatDuration(totalSeconds: Long): String {
     val s = totalSeconds.coerceAtLeast(0)
     val h = s / 3600
     val m = (s % 3600) / 60
@@ -675,6 +675,14 @@ fun VodPlayerScreen(url: String, title: String, onBack: () -> Unit) {
                 }.apply {
                     layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
                     this.player = player
+                    // Barra de progresso na cor do app (verde).
+                    findViewById<androidx.media3.ui.DefaultTimeBar>(androidx.media3.ui.R.id.exo_progress)?.apply {
+                        val green = android.graphics.Color.parseColor("#53FC18")
+                        setPlayedColor(green)
+                        setScrubberColor(green)
+                        setBufferedColor(0x80FFFFFF.toInt())
+                        setUnplayedColor(0x4DFFFFFF)
+                    }
                     useController = true
                     keepScreenOn = true
                     setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
