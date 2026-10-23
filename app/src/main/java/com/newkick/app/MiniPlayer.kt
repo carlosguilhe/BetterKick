@@ -21,6 +21,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.VolumeOff
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Icon
@@ -191,6 +193,19 @@ fun MiniPlayerOverlay(bottomInset: Dp, onExpand: (slug: String) -> Unit) {
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(Icons.Default.Close, "Fechar mini player", tint = Color.White, modifier = Modifier.size(14.dp))
+            }
+            // Mudo: o vídeo segue, sem som.
+            Box(
+                Modifier.align(Alignment.TopStart).padding(4.dp).size(22.dp).clip(RoundedCornerShape(11.dp))
+                    .background(Color(0x99000000)).clickable { PlayerSession.toggleMute() },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    if (PlayerSession.muted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp,
+                    if (PlayerSession.muted) tr("Ativar som") else tr("Silenciar"),
+                    tint = Color.White,
+                    modifier = Modifier.size(14.dp),
+                )
             }
             if (PlayerSession.buffering && PlayerSession.errorMessage == null) {
                 KLoader(Modifier.align(Alignment.Center), size = 24.dp)

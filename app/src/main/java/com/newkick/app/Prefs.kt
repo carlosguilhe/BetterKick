@@ -10,6 +10,9 @@ const val QUALITY_AUTO = 0
 
 data class HistoryEntry(val slug: String, val username: String, val category: String?, val at: Long)
 
+/** Um clipe ou transmissão que você parou no meio. */
+data class VodProgress(val url: String, val position: Long, val title: String, val thumbnail: String?, val channel: String, val duration: Long, val at: Long)
+
 class Prefs(context: Context) {
     private val sp = context.applicationContext.getSharedPreferences("newkick", Context.MODE_PRIVATE)
 
@@ -206,14 +209,104 @@ class Prefs(context: Context) {
         return 0L
     }
 
-    fun setVodPosition(url: String, positionMs: Long) {
+    /** Guarda onde você parou, com título e miniatura para a seção "Continuar assistindo". */
+    fun setVodPosition(url: String, positionMs: Long, title: String = "", thumbnail: String? = null, channel: String = "", durationMs: Long = 0L) {
         val old = runCatching { JSONArray(sp.getString("vod_positions", "[]")) }.getOrDefault(JSONArray())
-        val list = mutableListOf(JSONObject().put("u", url).put("p", positionMs))
+        val entry = JSONObject().put("u", url).put("p", positionMs).put("t", title).put("th", thumbnail ?: "")
+            .put("c", channel).put("d", durationMs).put("at", System.currentTimeMillis())
+        val list = mutableListOf(entry)
         for (i in 0 until old.length()) {
             val o = old.optJSONObject(i) ?: continue
             if (o.optString("u") != url) list += o
         }
         sp.edit().putString("vod_positions", JSONArray(list.take(50)).toString()).apply()
+    }
+
+    /** Clipes e transmissões que você começou e não terminou, o mais recente primeiro. */
+    fun continueWatching(): List<VodProgress> {
+        val arr = runCatching { JSONArray(sp.getString("vod_positions", "[]")) }.getOrDefault(JSONArray())
+        return (0 until arr.length()).mapNotNull { arr.optJSONObject(it) }
+            .filter { it.optString("t").isNotBlank() && it.optLong("p") > 0 }
+            .map {
+                VodProgress(
+                    it.optString("u"), it.optLong("p"), it.optString("t"), it.optString("th").ifBlank { null },
+                    it.optString("c"), it.optLong("d"), it.optLong("at"),
+                )
+            }
+            .sortedByDescending { it.at }
+    }
+
+    // ---- Listas de canais ----
+
+    /** Suas listas ("LoL", "Música"…), na ordem em que foram criadas: nome → canais. */
+    fun channelLists(): Map<String, List<String>> {
+        val obj = runCatching { JSONObject(sp.getString("channel_lists", "{}")) }.getOrDefault(JSONObject())
+        val out = LinkedHashMap<String, List<String>>()
+        val order = runCatching { JSONArray(sp.getString("channel_list_order", "[]")) }.getOrDefault(JSONArray())
+        val names = (0 until order.length()).map { order.getString(it) }.filter { obj.has(it) } + obj.keys().asSequence().filter { k ->
+            (0 until order.length()).none { order.getString(it) == k }
+        }
+        for (name in names) {
+            val arr = obj.optJSONArray(name) ?: continue
+            out[name] = (0 until arr.length()).map { arr.getString(it) }
+        }
+        return out
+    }
+
+    private fun saveChannelLists(lists: Map<String, List<String>>) {
+        val obj = JSONObject()
+        lists.forEach { (name, slugs) -> obj.put(name, JSONArray(slugs)) }
+        sp.edit().putString("channel_lists", obj.toString()).putString("channel_list_order", JSONArray(lists.keys.toList()).toString()).apply()
+    }
+
+    fun createChannelList(name: String) {
+        val clean = name.trim().take(24)
+        if (clean.isEmpty()) return
+        val lists = LinkedHashMap(channelLists())
+        if (!lists.containsKey(clean)) lists[clean] = emptyList()
+        saveChannelLists(lists)
+    }
+
+    fun deleteChannelList(name: String) {
+        val lists = LinkedHashMap(channelLists())
+        lists.remove(name)
+        saveChannelLists(lists)
+    }
+
+    /** Põe ou tira o canal da lista; devolve true se ficou dentro. */
+    fun toggleInChannelList(name: String, slug: String): Boolean {
+        val lists = LinkedHashMap(channelLists())
+        val current = lists[name].orEmpty()
+        val inside = slug !in current
+        lists[name] = if (inside) current + slug else current - slug
+        saveChannelLists(lists)
+        return inside
+    }
+
+    // ---- Tempo assistido ----
+
+    /** Soma segundos assistidos de um canal ao dia de hoje (guarda 60 dias). */
+    fun addWatchSeconds(slug: String, seconds: Int) {
+        val root = runCatching { JSONObject(sp.getString("watch_stats", "{}")) }.getOrDefault(JSONObject())
+        val today = java.time.LocalDate.now().toString()
+        val day = root.optJSONObject(today) ?: JSONObject().also { root.put(today, it) }
+        day.put(slug, day.optLong(slug) + seconds)
+        val cutoff = java.time.LocalDate.now().minusDays(60).toString()
+        root.keys().asSequence().toList().filter { it < cutoff }.forEach { root.remove(it) }
+        sp.edit().putString("watch_stats", root.toString()).apply()
+    }
+
+    /** Segundos assistidos por canal nos últimos [days] dias (hoje inclusive). */
+    fun watchStats(days: Int): Map<String, Long> {
+        val root = runCatching { JSONObject(sp.getString("watch_stats", "{}")) }.getOrDefault(JSONObject())
+        val from = java.time.LocalDate.now().minusDays((days - 1).toLong()).toString()
+        val out = HashMap<String, Long>()
+        for (date in root.keys()) {
+            if (date < from) continue
+            val day = root.optJSONObject(date) ?: continue
+            for (slug in day.keys()) out[slug] = (out[slug] ?: 0L) + day.optLong(slug)
+        }
+        return out
     }
 
     fun clearVodPosition(url: String) {

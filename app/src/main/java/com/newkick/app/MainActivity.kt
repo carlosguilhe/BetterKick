@@ -234,6 +234,11 @@ private fun App(linkedSlug: MutableState<String?>, linkedTab: MutableState<Strin
                 channelBack = if (route.startsWith("player:")) route else "home"
                 route = "channel:$slug"
             },
+            LocalOpenVod provides { p: VodProgress ->
+                VodQueue.set(listOf(VodEntry(p.url, p.title, p.thumbnail, p.channel)), 0)
+                vodBack = "home"
+                route = "vod:${p.url}|${p.title}"
+            },
         ) {
         AnimatedContent(
             targetState = route,
@@ -298,6 +303,10 @@ private fun App(linkedSlug: MutableState<String?>, linkedTab: MutableState<Strin
                     },
                     onOpen = { route = "player:$it" },
                 )
+                current == "stats" -> StatsScreen(onBack = {
+                    tabName = MainTab.PROFILE.name
+                    route = "home"
+                })
                 current == "onboarding" -> OnboardingScreen(onDone = {
                     prefs.onboarded = true
                     route = "home"
@@ -325,6 +334,7 @@ private fun App(linkedSlug: MutableState<String?>, linkedTab: MutableState<Strin
                     onOpenSite = { url, title -> route = "site:$title|$url" },
                     onOpenSettings = { route = "settings" },
                     onOpenHistory = { route = "history" },
+                    onOpenStats = { route = "stats" },
                     onLoggedOut = { tabName = MainTab.HOME.name },
                     onOpenMulti = { a, b -> route = "multi:$a|$b" },
                 )

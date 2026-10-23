@@ -40,6 +40,7 @@ object PlayerSession {
     private var failures = 0
     private var inForeground = true
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
+    private var statsJob: kotlinx.coroutines.Job? = null
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     val player: ExoPlayer? get() = holder?.player
@@ -118,8 +119,18 @@ object PlayerSession {
         errorMessage = null
         failures = 0
         audioOnly = false
+        muted = false
         applyVideo()
         registerNetworkWatcher(context.applicationContext)
+        // Tempo assistido: soma 30 s a cada meio minuto em que a live está tocando (também em segundo plano).
+        statsJob?.cancel()
+        statsJob = scope.launch {
+            while (true) {
+                kotlinx.coroutines.delay(30_000)
+                val c = this@PlayerSession.channel
+                if (c != null && playing) appContext?.let { Prefs(it).addWatchSeconds(c.slug, 30) }
+            }
+        }
         // Serviço de mídia: áudio em segundo plano + notificação (o app está em primeiro plano agora).
         runCatching { appContext?.startService(Intent(appContext, PlaybackService::class.java)) }
         return created
@@ -137,6 +148,15 @@ object PlayerSession {
             }
         }
         runCatching { cm.registerDefaultNetworkCallback(cb) }.onSuccess { networkCallback = cb }
+    }
+
+    /** Mudo (botão do mini player): o vídeo segue tocando, sem som. */
+    var muted by mutableStateOf(false)
+        private set
+
+    fun toggleMute() {
+        muted = !muted
+        player?.volume = if (muted) 0f else 1f
     }
 
     fun togglePlay() {
@@ -171,6 +191,8 @@ object PlayerSession {
     }
 
     fun release() {
+        statsJob?.cancel()
+        statsJob = null
         appContext?.let { ctx ->
             networkCallback?.let { cb -> runCatching { ctx.getSystemService(ConnectivityManager::class.java)?.unregisterNetworkCallback(cb) } }
             runCatching { ctx.stopService(Intent(ctx, PlaybackService::class.java)) }
@@ -188,5 +210,6 @@ object PlayerSession {
         buffering = true
         errorMessage = null
         audioOnly = false
+        muted = false
     }
 }

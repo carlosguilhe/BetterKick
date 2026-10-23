@@ -12,6 +12,9 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -133,6 +136,7 @@ fun MainShell(
     onOpenSite: (url: String, title: String) -> Unit,
     onOpenSettings: () -> Unit,
     onOpenHistory: () -> Unit,
+    onOpenStats: () -> Unit = {},
     onLoggedOut: () -> Unit,
     onOpenMulti: (String, String) -> Unit = { _, _ -> },
 ) {
@@ -218,7 +222,7 @@ fun MainShell(
                     MainTab.CATEGORIES -> CategoriesTab(category, { category = it }, lang, setLang, bottomInset, refreshTick, scrollSignals[MainTab.CATEGORIES] ?: 0, { refreshTick++ }, onOpen, longPress)
                     MainTab.FOLLOWING -> FollowingTab(followedState, loggedIn, bottomInset, scrollSignals[MainTab.FOLLOWING] ?: 0, { refreshTick++ }, onOpen, onLogin, longPress)
                     MainTab.FEATURED -> FeaturedTab(lang, setLang, bottomInset, refreshTick, scrollSignals[MainTab.FEATURED] ?: 0, { refreshTick++ }, onOpen, longPress)
-                    MainTab.PROFILE -> ProfileTab(bottomInset, scrollSignals[MainTab.PROFILE] ?: 0, onLogin, onLoggedOut, onOpenSite, onOpenSettings, onOpenHistory)
+                    MainTab.PROFILE -> ProfileTab(bottomInset, scrollSignals[MainTab.PROFILE] ?: 0, onLogin, onLoggedOut, onOpenSite, onOpenSettings, onOpenHistory, onOpenStats)
                 }
             }
         }
@@ -365,6 +369,7 @@ private fun HomeTab(
     val context = LocalContext.current
     val prefs = remember { Prefs(context) }
     val favorites = remember { prefs.favorites() }
+    val continueItems = remember(refreshTick) { prefs.continueWatching().take(8) }
     val recents = remember { prefs.recents() }
     val listState = rememberLazyListState()
     LaunchedEffect(scrollSignal) { if (scrollSignal > 0) listState.animateScrollToItem(0) }
@@ -539,6 +544,16 @@ private fun HomeTab(
                             }
                         }
                     }
+                    // Clipes e transmissões que você parou no meio.
+                
+                    if (continueItems.isNotEmpty()) {
+                        item { SectionTitle("Continuar assistindo") }
+                        item {
+                            LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                items(continueItems, key = { "c_" + it.url }) { progress -> ContinueCard(progress) }
+                            }
+                        }
+                    }
                     if (recommended.isNotEmpty()) {
                         item { SectionTitle("Recomendado para você") }
                         item {
@@ -586,6 +601,39 @@ private fun HomeTab(
                 }
             }
         }
+    }
+}
+
+/** Um clipe ou transmissão que você parou no meio: miniatura com a barra verde do quanto já viu. */
+@Composable
+private fun ContinueCard(progress: VodProgress) {
+    val openVod = LocalOpenVod.current
+    Column(
+        Modifier
+            .width(200.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(role = androidx.compose.ui.semantics.Role.Button) { openVod(progress) },
+    ) {
+        Box {
+            AsyncImage(
+                model = progress.thumbnail,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant),
+            )
+            if (progress.duration > 0) {
+                val fraction = (progress.position.toFloat() / progress.duration).coerceIn(0f, 1f)
+                Box(Modifier.align(Alignment.BottomStart).fillMaxWidth().height(4.dp).background(Color(0x66000000)))
+                Box(Modifier.align(Alignment.BottomStart).fillMaxWidth(fraction).height(4.dp).background(KickGreen))
+            }
+        }
+        Text(progress.title, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 6.dp))
+        Text(
+            listOfNotNull(progress.channel.takeIf { it.isNotBlank() }, formatDuration(progress.position / 1000)).joinToString(" • "),
+            fontSize = 11.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+        )
     }
 }
 
@@ -722,6 +770,7 @@ private fun FollowingTab(
     LaunchedEffect(scrollSignal) { if (scrollSignal > 0) gridState.animateScrollToItem(0) }
     var search by remember { mutableStateOf("") }
     var mode by remember { mutableIntStateOf(0) } // 0 = todos, 1 = ao vivo, 2 = offline
+    var listFilter by remember { mutableStateOf<String?>(null) }
 
     Column(Modifier.fillMaxSize().statusBarsPadding()) {
         val live = state.list.count { it.isLive }
@@ -757,8 +806,30 @@ private fun FollowingTab(
                         FilterChip(selected = mode == i, onClick = { mode = i }, label = { Text(label) })
                     }
                 }
+                // Suas listas (criadas pelo menu de segurar um canal → "Adicionar a uma lista").
+                val listContext = androidx.compose.ui.platform.LocalContext.current
+                val listPrefs = remember { Prefs(listContext) }
+                val channelLists = listPrefs.channelLists()
+                if (channelLists.isNotEmpty()) {
+                    Row(
+                        Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 2.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        channelLists.keys.forEach { name ->
+                            FilterChip(selected = listFilter == name, onClick = { listFilter = if (listFilter == name) null else name }, label = { Text("★ $name") })
+                        }
+                        listFilter?.let { name ->
+                            TextButton(onClick = {
+                                listPrefs.deleteChannelList(name)
+                                listFilter = null
+                            }) { Text("Excluir lista", color = MaterialTheme.colorScheme.error) }
+                        }
+                    }
+                }
                 val filtered = state.list.filter { ch ->
                     (search.isBlank() || ch.username.contains(search, ignoreCase = true) || ch.slug.contains(search, ignoreCase = true)) &&
+                        (listFilter == null || ch.slug in channelLists[listFilter].orEmpty()) &&
                         when (mode) { 1 -> ch.isLive; 2 -> !ch.isLive; else -> true }
                 }
                 PullRefresh(onRefresh = onRefresh) {

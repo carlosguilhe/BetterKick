@@ -233,6 +233,9 @@ fun CategoryCard(cat: Category, modifier: Modifier = Modifier, onClick: () -> Un
 /** Abre a página do canal (clipes e transmissões anteriores). Fornecido pelo App; padrão não faz nada. */
 val LocalOpenChannel = androidx.compose.runtime.staticCompositionLocalOf<(String) -> Unit> { {} }
 
+/** Retoma um clipe ou transmissão que você parou no meio. Fornecido pelo App. */
+val LocalOpenVod = androidx.compose.runtime.staticCompositionLocalOf<(VodProgress) -> Unit> { {} }
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun LiveCard(item: LiveItem, onLongClick: (() -> Unit)? = null, onClick: () -> Unit) {

@@ -9,6 +9,7 @@ import androidx.annotation.OptIn
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -39,12 +40,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -59,6 +63,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
@@ -339,6 +344,68 @@ fun SettingsScreen(onBack: () -> Unit) {
     }
 }
 
+// ───────────────────────────── Tempo assistido ─────────────────────────────
+
+private fun formatWatchTime(seconds: Long): String {
+    val minutes = seconds / 60
+    return if (minutes >= 60) "%dh %02dmin".format(minutes / 60, minutes % 60) else "$minutes min"
+}
+
+/** Quanto você assistiu de lives, por canal, nos últimos 7 ou 30 dias. */
+@Composable
+fun StatsScreen(onBack: () -> Unit) {
+    val context = LocalContext.current
+    val prefs = remember { Prefs(context) }
+    BackHandler(onBack = onBack)
+    var days by remember { mutableIntStateOf(7) }
+    val stats = remember(days) { prefs.watchStats(days).entries.sortedByDescending { it.value } }
+    val total = stats.sumOf { it.value }
+    val top = stats.firstOrNull()?.value ?: 1L
+
+    Column(Modifier.fillMaxSize().statusBarsPadding().verticalScroll(rememberScrollState())) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Voltar") }
+            Text("Tempo assistido", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        }
+        Row(Modifier.padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(selected = days == 7, onClick = { days = 7 }, label = { Text("Últimos 7 dias") })
+            FilterChip(selected = days == 30, onClick = { days = 30 }, label = { Text("Últimos 30 dias") })
+        }
+        Text(
+            formatWatchTime(total),
+            fontSize = 36.sp,
+            fontWeight = FontWeight.Bold,
+            color = KickGreen,
+            modifier = Modifier.padding(start = 16.dp, top = 12.dp),
+        )
+        Text(
+            "de lives assistidas neste período",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 13.sp,
+            modifier = Modifier.padding(start = 16.dp, bottom = 12.dp),
+        )
+        if (stats.isEmpty()) {
+            Text(
+                "Nada por aqui ainda. O tempo que você passa assistindo lives aparece nesta lista.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(16.dp),
+            )
+        }
+        stats.take(10).forEach { (slug, seconds) ->
+            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
+                Row {
+                    Text(slug, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                    Text(formatWatchTime(seconds), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Box(Modifier.padding(top = 4.dp).fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)).background(MaterialTheme.colorScheme.surfaceVariant)) {
+                    Box(Modifier.fillMaxWidth(seconds.toFloat() / top).height(6.dp).background(KickGreen))
+                }
+            }
+        }
+        Spacer(Modifier.height(24.dp).navigationBarsPadding())
+    }
+}
+
 // ───────────────────────────── Histórico ─────────────────────────────
 
 private fun formatAgo(thenMs: Long): String {
@@ -452,10 +519,31 @@ private fun formatDate(iso: String?): String? {
     return if (d.size == 3) "${d[2]}/${d[1]}/${d[0]}" else null
 }
 
+private fun shareText(context: Context, text: String) {
+    val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(android.content.Intent.EXTRA_TEXT, text)
+    }
+    context.startActivity(android.content.Intent.createChooser(send, tr("Compartilhar")))
+}
+
 @Composable
-private fun MediaCard(thumbnail: String?, title: String, subtitle: String, duration: String?, onClick: () -> Unit) {
+private fun MediaCard(thumbnail: String?, title: String, subtitle: String, duration: String?, onShare: (() -> Unit)? = null, onClick: () -> Unit) {
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable(onClick = onClick)) {
         Box {
+            onShare?.let {
+                Box(
+                    Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(6.dp)
+                        .size(30.dp)
+                        .clip(CircleShape)
+                        .background(Color(0x99000000))
+                        .clickable(onClick = it)
+                        .zIndex(1f),
+                    contentAlignment = Alignment.Center,
+                ) { Icon(androidx.compose.material.icons.Icons.Default.Share, "Compartilhar", tint = Color.White, modifier = Modifier.size(16.dp)) }
+            }
             AsyncImage(
                 model = thumbnail,
                 contentDescription = null,
@@ -490,6 +578,16 @@ fun ChannelScreen(slug: String, onBack: () -> Unit, onWatchLive: () -> Unit, onP
     var loadingMore by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    var query by remember { mutableStateOf("") }
+    val loggedIn = remember { KickSession.hasToken }
+    var following by remember { mutableStateOf<Boolean?>(null) }
+    var followBusy by remember { mutableStateOf(false) }
+    val haptics = rememberHaptics()
+
+    LaunchedEffect(slug) {
+        if (loggedIn) following = runCatching { KickApi.isFollowing(slug) }.getOrNull()
+    }
 
     LaunchedEffect(slug) {
         loading = true
@@ -510,7 +608,14 @@ fun ChannelScreen(slug: String, onBack: () -> Unit, onWatchLive: () -> Unit, onP
     Column(Modifier.fillMaxSize().statusBarsPadding()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Voltar") }
-            Text(profile?.username ?: slug, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            Text(profile?.username ?: slug, fontWeight = FontWeight.Bold, fontSize = 18.sp, modifier = Modifier.weight(1f))
+            IconButton(onClick = {
+                val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(android.content.Intent.EXTRA_TEXT, "${profile?.username ?: slug} • https://kick.com/$slug")
+                }
+                context.startActivity(android.content.Intent.createChooser(send, tr("Compartilhar canal")))
+            }) { Icon(androidx.compose.material.icons.Icons.Default.Share, "Compartilhar") }
         }
         when {
             loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { KLoader(size = 64.dp) }
@@ -533,9 +638,37 @@ fun ChannelScreen(slug: String, onBack: () -> Unit, onWatchLive: () -> Unit, onP
                                     contentScale = ContentScale.Crop,
                                     modifier = Modifier.size(72.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant),
                                 )
-                                Column(Modifier.padding(start = 14.dp)) {
+                                Column(Modifier.padding(start = 14.dp).weight(1f)) {
                                     Text(p.username, fontWeight = FontWeight.Bold, fontSize = 20.sp)
                                     Text(tr("%s seguidores").format(formatViewers(p.followers)), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
+                                }
+                                // Seguir / Seguindo (só com login).
+                                if (loggedIn) {
+                                    Text(
+                                        when (following) { true -> "Seguindo"; false -> "Seguir"; null -> "..." },
+                                        color = if (following == true) KickGreen else Color(0xFF0B0E0F),
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(if (following == true) Color(0x3353FC19) else KickGreen)
+                                            .border(1.5.dp, KickGreen, RoundedCornerShape(8.dp))
+                                            .clickable(enabled = following != null && !followBusy) {
+                                                val want = following != true
+                                                followBusy = true
+                                                scope.launch {
+                                                    val status = ChatWeb.setFollowAnywhere(context, slug, want)
+                                                    if (status in 200..299) {
+                                                        following = want
+                                                        haptics.confirm()
+                                                    } else {
+                                                        Toast.makeText(context, tr(if (want) "Não foi possível seguir (código %d)." else "Não foi possível deixar de seguir (código %d).").format(status), Toast.LENGTH_LONG).show()
+                                                    }
+                                                    followBusy = false
+                                                }
+                                            }
+                                            .padding(horizontal = 14.dp, vertical = 8.dp),
+                                    )
                                 }
                             }
                             p.bio?.let { Text(it, fontSize = 13.sp, maxLines = 4, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 10.dp)) }
@@ -545,17 +678,37 @@ fun ChannelScreen(slug: String, onBack: () -> Unit, onWatchLive: () -> Unit, onP
                                 FilterChip(selected = tab == 0, onClick = { tab = 0 }, label = { Text(tr("Clipes (%s)").format("${clips.size}${if (clipCursor != null) "+" else ""}")) })
                                 FilterChip(selected = tab == 1, onClick = { tab = 1 }, label = { Text(tr("Transmissões (%d)").format(vods.size)) })
                             }
+                            OutlinedTextField(
+                                value = query,
+                                onValueChange = { query = it },
+                                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                                placeholder = { Text("Buscar nos vídeos deste canal") },
+                                singleLine = true,
+                                trailingIcon = { if (query.isNotEmpty()) IconButton(onClick = { query = "" }) { Icon(androidx.compose.material.icons.Icons.Default.Close, "Limpar") } },
+                                shape = RoundedCornerShape(12.dp),
+                            )
                         }
                     }
                 }
+                val clipName = tr("Clipe de %s").format(profile?.username ?: slug)
+                val shownClips = clips.filter { query.isBlank() || it.title.contains(query, ignoreCase = true) || (it.creator ?: "").contains(query, ignoreCase = true) }
+                val shownVods = vods.filter { query.isBlank() || it.title.contains(query, ignoreCase = true) || (it.category ?: "").contains(query, ignoreCase = true) }
                 if (tab == 0) {
-                    if (clips.isEmpty()) item(span = { GridItemSpan(maxLineSpan) }) { Text("Sem clipes.", color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                    gridItems(clips, key = { it.id }) { c ->
+                    if (shownClips.isEmpty()) item(span = { GridItemSpan(maxLineSpan) }) {
+                        Text(if (clips.isEmpty()) "Sem clipes." else "Nada encontrado.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    gridItems(shownClips, key = { it.id }) { c ->
                         MediaCard(
                             c.thumbnail, c.title.ifBlank { "Clipe" },
                             listOfNotNull(c.creator?.let { tr("por %s").format(it) }, "${formatViewers(c.views)} views").joinToString(" • "),
                             formatDuration(c.durationSec.toLong()),
-                        ) { onPlay(c.url, c.title.ifBlank { tr("Clipe de %s").format(profile?.username ?: slug) }) }
+                            onShare = { shareText(context, "${c.title.ifBlank { clipName }} • https://kick.com/$slug/clips/${c.id}") },
+                        ) {
+                            // Os clipes da lista viram uma fila: ao acabar um, toca o próximo.
+                            val entries = shownClips.map { VodEntry(it.url, it.title.ifBlank { clipName }, it.thumbnail, profile?.username ?: slug, "https://kick.com/$slug/clips/${it.id}") }
+                            VodQueue.set(entries, shownClips.indexOf(c))
+                            onPlay(c.url, c.title.ifBlank { clipName })
+                        }
                     }
                     if (clipCursor != null) item(span = { GridItemSpan(maxLineSpan) }) {
                         TextButton(
@@ -573,13 +726,19 @@ fun ChannelScreen(slug: String, onBack: () -> Unit, onWatchLive: () -> Unit, onP
                         ) { Text(if (loadingMore) "Carregando..." else "Carregar mais clipes", color = KickGreen) }
                     }
                 } else {
-                    if (vods.isEmpty()) item(span = { GridItemSpan(maxLineSpan) }) { Text("Sem transmissões anteriores salvas.", color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                    gridItems(vods, key = { it.id }) { v ->
+                    if (shownVods.isEmpty()) item(span = { GridItemSpan(maxLineSpan) }) {
+                        Text(if (vods.isEmpty()) "Sem transmissões anteriores salvas." else "Nada encontrado.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    gridItems(shownVods, key = { it.id }) { v ->
                         MediaCard(
                             v.thumbnail, v.title,
                             listOfNotNull(v.category, formatDate(v.createdAt), "${formatViewers(v.views)} views").joinToString(" • "),
                             v.durationMs.takeIf { it > 0 }?.let { formatDuration(it / 1000) },
-                        ) { onPlay(v.url, v.title) }
+                            onShare = { shareText(context, "${v.title} • https://kick.com/$slug/videos/${v.id}") },
+                        ) {
+                            VodQueue.set(listOf(VodEntry(v.url, v.title, v.thumbnail, profile?.username ?: slug, "https://kick.com/$slug/videos/${v.id}")), 0)
+                            onPlay(v.url, v.title)
+                        }
                     }
                 }
             }
@@ -588,6 +747,22 @@ fun ChannelScreen(slug: String, onBack: () -> Unit, onWatchLive: () -> Unit, onP
 }
 
 // ───────────────────────────── Player de clipes e VODs ─────────────────────────────
+
+data class VodEntry(val url: String, val title: String, val thumbnail: String?, val channel: String, val shareUrl: String? = null)
+
+/** Fila de clipes do canal: a página do canal monta, o player toca em sequência. */
+object VodQueue {
+    private var entries: List<VodEntry> = emptyList()
+    private var start = 0
+
+    fun set(list: List<VodEntry>, startIndex: Int) {
+        entries = list
+        start = startIndex
+    }
+
+    /** A fila, se o item inicial for mesmo [url]; senão null (toca um vídeo só). */
+    fun take(url: String): Pair<List<VodEntry>, Int>? = if (entries.getOrNull(start)?.url == url) entries to start else null
+}
 
 /** Player de vídeo gravado (clipe ou VOD): com barra de progresso e tela cheia. */
 @OptIn(UnstableApi::class)
@@ -602,7 +777,11 @@ fun VodPlayerScreen(url: String, title: String, onBack: () -> Unit) {
     LaunchedEffect(Unit) { PlayerSession.release() }
 
     val prefs = remember { Prefs(context) }
+    // Fila de clipes do canal (quando veio da página do canal): ao acabar um, toca o próximo.
+    val (playlist, startIndex) = remember(url) { VodQueue.take(url) ?: (listOf(VodEntry(url, title, null, "")) to 0) }
     val resumeAt = remember(url) { prefs.vodPosition(url) }
+    var currentIndex by remember { mutableIntStateOf(startIndex) }
+    val entry = playlist[currentIndex.coerceIn(playlist.indices)]
     val player = remember {
         ExoPlayer.Builder(context)
             .setAudioAttributes(AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build(), true)
@@ -610,10 +789,23 @@ fun VodPlayerScreen(url: String, title: String, onBack: () -> Unit) {
             .build()
             .apply {
                 // Continua de onde você parou (se já tinha assistido um pedaço).
-                setMediaItem(MediaItem.fromUri(url), resumeAt)
+                setMediaItems(playlist.map { MediaItem.fromUri(it.url) }, startIndex, resumeAt)
                 playWhenReady = true
                 prepare()
             }
+    }
+    DisposableEffect(player) {
+        val listener = object : androidx.media3.common.Player.Listener {
+            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                // Terminou sozinho: esse já foi assistido inteiro.
+                if (reason == androidx.media3.common.Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
+                    playlist.getOrNull(currentIndex)?.let { prefs.clearVodPosition(it.url) }
+                }
+                currentIndex = player.currentMediaItemIndex
+            }
+        }
+        player.addListener(listener)
+        onDispose { player.removeListener(listener) }
     }
     var speed by remember { mutableStateOf(1f) }
     var speedMenu by remember { mutableStateOf(false) }
@@ -633,8 +825,10 @@ fun VodPlayerScreen(url: String, title: String, onBack: () -> Unit) {
         val duration = player.duration
         val position = player.currentPosition
         if (duration == C.TIME_UNSET || duration <= 0) return
+        val current = playlist.getOrNull(player.currentMediaItemIndex) ?: return
         // Quase no fim (ou começo): não precisa lembrar.
-        if (position < 15_000 || position > duration - 20_000) prefs.clearVodPosition(url) else prefs.setVodPosition(url, position)
+        if (position < 15_000 || position > duration - 20_000) prefs.clearVodPosition(current.url)
+        else prefs.setVodPosition(current.url, position, current.title, current.thumbnail, current.channel, duration)
     }
     LaunchedEffect(Unit) {
         while (true) {
@@ -701,7 +895,16 @@ fun VodPlayerScreen(url: String, title: String, onBack: () -> Unit) {
             IconButton(onClick = { if (landscape) activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED else onBack() }) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, "Voltar", tint = Color.White)
             }
-            Text(title, color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            Text(entry.title, color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            IconButton(onClick = {
+                val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(android.content.Intent.EXTRA_TEXT, entry.shareUrl ?: entry.title)
+                }
+                context.startActivity(android.content.Intent.createChooser(send, tr("Compartilhar")))
+            }) {
+                Icon(androidx.compose.material.icons.Icons.Default.Share, "Compartilhar", tint = Color.White)
+            }
             Box {
                 TextButton(onClick = { speedMenu = true }) {
                     Text(if (speed == 1f) "1x" else "${speed.toString().removeSuffix(".0")}x", color = Color.White, fontWeight = FontWeight.Bold)

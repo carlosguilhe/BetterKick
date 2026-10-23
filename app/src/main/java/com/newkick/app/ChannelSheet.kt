@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -46,6 +47,8 @@ fun ChannelActionsSheet(
     var busy by remember { mutableStateOf(false) }
     var muted by remember { mutableStateOf(prefs.isMuted(target.slug)) }
     var favorite by remember { mutableStateOf(prefs.isFavorite(target.slug)) }
+    var listsOpen by remember { mutableStateOf(false) }
+    if (listsOpen) ListsDialog(prefs, target) { listsOpen = false }
 
     LaunchedEffect(target.slug) {
         if (loggedIn && followed == null) followed = runCatching { KickApi.isFollowing(target.slug) }.getOrNull()
@@ -109,6 +112,7 @@ fun ChannelActionsSheet(
             SheetAction(if (favorite) "Remover dos favoritos" else "Favoritar (estrela)") {
                 favorite = prefs.toggleFavorite(target.slug)
             }
+            SheetAction("Adicionar a uma lista") { listsOpen = true }
             SheetAction("Compartilhar") {
                 val send = Intent(Intent.ACTION_SEND).apply {
                     type = "text/plain"
@@ -118,6 +122,53 @@ fun ChannelActionsSheet(
             }
         }
     }
+}
+
+/** Marca em quais das suas listas o canal está e cria listas novas. */
+@Composable
+private fun ListsDialog(prefs: Prefs, target: ChannelTarget, onDismiss: () -> Unit) {
+    var lists by remember { mutableStateOf(prefs.channelLists()) }
+    var newName by remember { mutableStateOf("") }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(tr("Listas de %s").format(target.username)) },
+        text = {
+            Column {
+                lists.forEach { (name, slugs) ->
+                    androidx.compose.foundation.layout.Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                prefs.toggleInChannelList(name, target.slug)
+                                lists = prefs.channelLists()
+                            }
+                            .padding(vertical = 6.dp),
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                    ) {
+                        androidx.compose.material3.Checkbox(checked = target.slug in slugs, onCheckedChange = null)
+                        Text(name, modifier = Modifier.padding(start = 10.dp))
+                    }
+                }
+                androidx.compose.material3.OutlinedTextField(
+                    value = newName,
+                    onValueChange = { newName = it },
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    placeholder = { Text("Nova lista") },
+                    singleLine = true,
+                    trailingIcon = {
+                        if (newName.isNotBlank()) TextButton(onClick = {
+                            val name = newName.trim().take(24)
+                            prefs.createChannelList(name)
+                            prefs.toggleInChannelList(name, target.slug)
+                            newName = ""
+                            lists = prefs.channelLists()
+                        }) { Text("Criar") }
+                    },
+                )
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Pronto") } },
+    )
 }
 
 @Composable

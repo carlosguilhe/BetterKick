@@ -414,6 +414,7 @@ private fun PlayerContent(
     var interactionTick by remember { mutableIntStateOf(0) }
     var menuOpen by remember { mutableStateOf(false) }
     var castOpen by remember { mutableStateOf(false) }
+    var rotationLocked by remember { mutableStateOf(false) }
     var seekPosition by remember { mutableLongStateOf(0L) }
     var seekBuffered by remember { mutableLongStateOf(0L) }
     var seekDuration by remember { mutableLongStateOf(0L) }
@@ -895,6 +896,16 @@ private fun PlayerContent(
                                             prefs.showStats = showStats
                                         },
                                     )
+                                    DropdownMenuItem(
+                                        text = { Text(mark(rotationLocked, "Bloquear rotação"), color = if (rotationLocked) KickGreen else Color.Unspecified) },
+                                        onClick = {
+                                            menuOpen = false
+                                            rotationLocked = !rotationLocked
+                                            // Trava na posição atual (retrato ou paisagem); destravar volta ao automático.
+                                            context.findActivity()?.requestedOrientation =
+                                                if (rotationLocked) ActivityInfo.SCREEN_ORIENTATION_LOCKED else ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                                        },
+                                    )
                                 }
                             }
                         }
@@ -1014,6 +1025,32 @@ private fun PlayerContent(
                     ChatPanel(channel.slug, Modifier.requiredWidth(320.dp).fillMaxHeight())
                 }
             }
+        }
+    } else if (LocalConfiguration.current.screenWidthDp >= 720) {
+        // Tablet ou dobrável aberto, em pé: vídeo e informações à esquerda, chat ao lado.
+        Row(Modifier.fillMaxSize().statusBarsPadding()) {
+            Column(Modifier.weight(1.6f).fillMaxHeight()) {
+                playerBox(Modifier.fillMaxWidth().aspectRatio(16f / 9f))
+                Text(
+                    channel.title,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 17.sp,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(16.dp, 12.dp, 16.dp, 2.dp).clickable { openChannel(channel.slug) },
+                )
+                Text(
+                    listOfNotNull(
+                        channel.username,
+                        tr("%s assistindo").format(formatViewers(channel.viewers)),
+                        channel.category?.takeIf { it.isNotBlank() },
+                    ).joinToString(" • "),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 13.sp,
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                )
+            }
+            ChatPanel(channel.slug, Modifier.weight(1f).fillMaxHeight())
         }
     } else {
         Column(

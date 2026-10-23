@@ -217,6 +217,7 @@ fun ProfileTab(
     onOpenSite: (url: String, title: String) -> Unit,
     onOpenSettings: () -> Unit,
     onOpenHistory: () -> Unit,
+    onOpenStats: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val prefs = remember { Prefs(context) }
@@ -307,7 +308,7 @@ fun ProfileTab(
         }
 
         SectionLabel("NO APP")
-        listOf("Histórico de lives" to onOpenHistory, "Configurações do app" to onOpenSettings).forEach { (label, action) ->
+        listOf("Histórico de lives" to onOpenHistory, "Tempo assistido" to onOpenStats, "Configurações do app" to onOpenSettings).forEach { (label, action) ->
             Row(
                 Modifier.fillMaxWidth().clickable(onClick = action).padding(horizontal = 16.dp, vertical = 14.dp),
                 verticalAlignment = Alignment.CenterVertically,
