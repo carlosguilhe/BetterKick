@@ -854,7 +854,8 @@ fun VodPlayerScreen(url: String, title: String, onBack: () -> Unit) {
         onDispose { controller?.show(WindowInsetsCompat.Type.systemBars()) }
     }
     BackHandler {
-        if (landscape) activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED else onBack()
+        if (landscape) activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        onBack()
     }
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
@@ -882,7 +883,7 @@ fun VodPlayerScreen(url: String, title: String, onBack: () -> Unit) {
                     setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
                     setFullscreenButtonClickListener { fullscreen ->
                         activity?.requestedOrientation =
-                            if (fullscreen) ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE else ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                            if (fullscreen) ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE else ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
                     }
                 }
             },
@@ -892,7 +893,10 @@ fun VodPlayerScreen(url: String, title: String, onBack: () -> Unit) {
             Modifier.align(Alignment.TopStart).then(if (landscape) Modifier else Modifier.statusBarsPadding()).fillMaxWidth().padding(4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(onClick = { if (landscape) activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED else onBack() }) {
+            IconButton(onClick = {
+                if (landscape) activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                onBack()
+            }) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, "Voltar", tint = Color.White)
             }
             Text(entry.title, color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))

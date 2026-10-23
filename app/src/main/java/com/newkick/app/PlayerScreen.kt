@@ -239,13 +239,15 @@ fun PlayerScreen(slug: String, onClose: () -> Unit, onMinimize: () -> Unit, onOf
     }
 
     BackHandler {
-        if (landscape) activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-        else onMinimize()
+        // Em tela cheia o voltar sai direto: força o retrato (senão o sensor devolve a paisagem e o voltar
+        // parece não fazer nada) e a live continua no mini player.
+        if (landscape) activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        onMinimize()
     }
 
     val toggleFullscreen = {
         activity?.requestedOrientation =
-            if (landscape) ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            if (landscape) ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
             else ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
     }
 
@@ -273,7 +275,10 @@ fun PlayerScreen(slug: String, onClose: () -> Unit, onMinimize: () -> Unit, onOf
                 channel = s.channel,
                 landscape = landscape,
                 inPip = inPip,
-                onBack = { if (landscape) toggleFullscreen() else onMinimize() },
+                onBack = {
+                    if (landscape) activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                    onMinimize()
+                },
                 onMinimize = onMinimize,
                 onToggleFullscreen = toggleFullscreen,
                 onEnterPip = { activity?.let(::enterPip) },
