@@ -559,7 +559,8 @@ private fun HomeTab(
                         item {
                             LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                 items(recommended, key = { "r_" + it.slug }) { live ->
-                                    Box(Modifier.size(width = 260.dp, height = 190.dp)) {
+                                    // Só a largura é fixa: a altura acompanha o conteúdo (título e categoria completos).
+                                    Box(Modifier.width(260.dp)) {
                                         LiveCard(live, onLongClick = { onLongPress(ChannelTarget(live.slug, live.username)) }) { onOpen(live.slug) }
                                     }
                                 }
@@ -580,7 +581,7 @@ private fun HomeTab(
                         item {
                             LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                 items(categories.take(12), key = { it.slug }) { cat ->
-                                    CategoryCard(cat, Modifier.size(width = 118.dp, height = 200.dp)) { onCategory(cat) }
+                                    CategoryCard(cat, Modifier.width(118.dp)) { onCategory(cat) }
                                 }
                             }
                         }

@@ -225,7 +225,7 @@ fun CategoryCard(cat: Category, modifier: Modifier = Modifier, onClick: () -> Un
                 .clip(RoundedCornerShape(10.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant),
         )
-        Text(cat.name, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 6.dp))
+        Text(cat.name, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 6.dp))
         Text(tr("%s assistindo").format(formatViewers(cat.viewers)), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
@@ -274,7 +274,7 @@ fun LiveCard(item: LiveItem, onLongClick: (() -> Unit)? = null, onClick: () -> U
                     listOfNotNull(item.username, item.category?.takeIf { it.isNotBlank() }).joinToString(" • "),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 12.sp,
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(top = 2.dp),
                 )
