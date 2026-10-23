@@ -39,7 +39,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -197,9 +196,9 @@ fun SpeedTestRow(modifier: Modifier = Modifier) {
                 scope.launch {
                     speed = try {
                         val r = SpeedTest.run()
-                        "%.0f Mbps • ideal para ${r.recommendation}".format(r.best)
+                        tr("%.0f Mbps • ideal para %s").format(r.best, r.recommendation)
                     } catch (e: Exception) {
-                        "Falha no teste: ${e.message}"
+                        tr("Falha no teste: %s").format(e.message)
                     }
                     testing = false
                 }
@@ -223,14 +222,14 @@ fun CategoryCard(cat: Category, modifier: Modifier = Modifier, onClick: () -> Un
                 .background(MaterialTheme.colorScheme.surfaceVariant),
         )
         Text(cat.name, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 6.dp))
-        Text("${formatViewers(cat.viewers)} assistindo", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(tr("%s assistindo").format(formatViewers(cat.viewers)), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun LiveCard(item: LiveItem, onLongClick: (() -> Unit)? = null, onClick: () -> Unit) {
-    Column(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).combinedClickable(onClick = onClick, onLongClick = onLongClick)) {
+    Column(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).combinedClickable(onClick = onClick, onLongClick = onLongClick, role = androidx.compose.ui.semantics.Role.Button, onLongClickLabel = tr("Mais ações"))) {
         Box {
             AsyncImage(
                 model = item.thumbnail,
@@ -287,7 +286,7 @@ fun LiveBadge(viewers: Int, modifier: Modifier = Modifier) {
 @Composable
 @OptIn(ExperimentalFoundationApi::class)
 fun FollowedPreviewCard(ch: FollowedChannel, thumbnail: String?, modifier: Modifier = Modifier, onLongClick: (() -> Unit)? = null, onClick: () -> Unit) {
-    Column(modifier = modifier.clip(RoundedCornerShape(14.dp)).combinedClickable(onClick = onClick, onLongClick = onLongClick)) {
+    Column(modifier = modifier.clip(RoundedCornerShape(14.dp)).combinedClickable(onClick = onClick, onLongClick = onLongClick, role = androidx.compose.ui.semantics.Role.Button, onLongClickLabel = tr("Mais ações"))) {
         Box {
             AsyncImage(
                 model = thumbnail ?: ch.avatar,
@@ -325,7 +324,7 @@ fun FollowedPreviewCard(ch: FollowedChannel, thumbnail: String?, modifier: Modif
 @OptIn(ExperimentalFoundationApi::class)
 fun FollowedRow(ch: FollowedChannel, onLongClick: (() -> Unit)? = null, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).combinedClickable(onClick = onClick, onLongClick = onLongClick).padding(vertical = 4.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).combinedClickable(onClick = onClick, onLongClick = onLongClick, role = androidx.compose.ui.semantics.Role.Button, onLongClickLabel = tr("Mais ações")).padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         AsyncImage(
@@ -466,6 +465,35 @@ fun rememberIsOnline(): Boolean {
         onDispose { runCatching { cm?.unregisterNetworkCallback(callback) } }
     }
     return online
+}
+
+/** Vibração curta (respeita a opção "Vibração" das Configurações). */
+class Haptics(private val view: android.view.View, private val prefs: Prefs) {
+    /** Toque leve: troca de aba, opção ligada ou desligada. */
+    fun tick() {
+        if (prefs.haptics) view.performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK)
+    }
+
+    /** Segurar: abre um menu. */
+    fun press() {
+        if (prefs.haptics) view.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+    }
+
+    /** Ação concluída (seguir, favoritar). */
+    fun confirm() {
+        if (!prefs.haptics) return
+        view.performHapticFeedback(
+            if (android.os.Build.VERSION.SDK_INT >= 30) android.view.HapticFeedbackConstants.CONFIRM
+            else android.view.HapticFeedbackConstants.VIRTUAL_KEY,
+        )
+    }
+}
+
+@Composable
+fun rememberHaptics(): Haptics {
+    val view = androidx.compose.ui.platform.LocalView.current
+    val context = androidx.compose.ui.platform.LocalContext.current
+    return remember(view) { Haptics(view, Prefs(context)) }
 }
 
 /** Aviso flutuante (offline / API da Kick instável). */

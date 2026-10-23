@@ -4,7 +4,6 @@ import android.content.Context
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import android.view.ViewGroup
-import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.annotation.OptIn
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -47,7 +46,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
-import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -112,12 +110,13 @@ private fun <T> ChoiceRow(title: String, choices: List<Pair<String, T>>, selecte
 
 @Composable
 private fun SwitchRow(title: String, subtitle: String? = null, checked: Boolean, enabled: Boolean = true, onChange: (Boolean) -> Unit) {
+    val haptics = rememberHaptics()
     Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(title)
             subtitle?.let { Text(it, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
-        Switch(checked = checked, onCheckedChange = onChange, enabled = enabled)
+        Switch(checked = checked, onCheckedChange = { haptics.tick(); onChange(it) }, enabled = enabled)
     }
 }
 
@@ -143,6 +142,47 @@ fun SettingsScreen(onBack: () -> Unit) {
     var crash by remember { mutableStateOf<String?>(null) }
     var update by remember { mutableStateOf<Updater.Release?>(null) }
     var checking by remember { mutableStateOf(false) }
+    var vibration by remember { mutableStateOf(prefs.haptics) }
+    var dataSaver by remember { mutableStateOf(prefs.dataSaver) }
+    var uiLang by remember { mutableStateOf(prefs.uiLang) }
+    val haptics = rememberHaptics()
+
+    // Backup: um arquivo JSON com favoritos, histórico e preferências (o login não entra).
+    val exportLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.CreateDocument("application/json"),
+    ) { uri ->
+        if (uri != null) {
+            val ok = runCatching {
+                context.contentResolver.openOutputStream(uri)?.use { it.write(prefs.exportJson().toByteArray()) } != null
+            }.getOrDefault(false)
+            Toast.makeText(context, if (ok) "Backup salvo." else "Não consegui salvar o backup.", Toast.LENGTH_SHORT).show()
+        }
+    }
+    val importLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri != null) {
+            val text = runCatching { context.contentResolver.openInputStream(uri)?.use { String(it.readBytes()) } }.getOrNull()
+            if (text != null && prefs.importJson(text)) {
+                // Aplica na hora o que aparece nesta tela.
+                ThemeState.mode = prefs.themeMode
+                ThemeState.dynamic = prefs.dynamicColors
+                quality = prefs.quality
+                latency = prefs.latencyMs
+                gestures = prefs.gestures
+                overlay = prefs.chatOverlay
+                stats = prefs.showStats
+                lang = prefs.lang
+                notifyFav = prefs.notifyFavorites
+                notifyFollowed = prefs.notifyFollowed
+                vibration = prefs.haptics
+                dataSaver = prefs.dataSaver
+                Toast.makeText(context, "Dados restaurados.", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(context, "Esse arquivo não é um backup do BetterKick.", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
     val scope = rememberCoroutineScope()
     val loggedIn = remember { KickSession.hasToken }
 
@@ -163,6 +203,10 @@ fun SettingsScreen(onBack: () -> Unit) {
             latency = it
             prefs.latencyMs = it
         }
+        SwitchRow("Economia de dados", "No 4G/5G, o modo automático não passa de 480p", dataSaver) {
+            dataSaver = it
+            prefs.dataSaver = it
+        }
         SwitchRow("Gestos de brilho e volume", "Arraste na tela cheia", gestures) {
             gestures = it
             prefs.gestures = it
@@ -178,8 +222,31 @@ fun SettingsScreen(onBack: () -> Unit) {
 
         SettingsSection("APARÊNCIA")
         ChoiceRow("Tema", listOf("Escuro" to "dark", "Claro" to "light", "Sistema" to "system"), ThemeState.mode) {
+            haptics.tick()
             ThemeState.mode = it
             prefs.themeMode = it
+        }
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            SwitchRow("Cores do sistema", "Fundos com as cores do papel de parede (Material You)", ThemeState.dynamic) {
+                haptics.tick()
+                ThemeState.dynamic = it
+                prefs.dynamicColors = it
+            }
+        }
+        SwitchRow("Vibração", "Toque leve ao segurar, trocar de aba e confirmar", vibration) {
+            vibration = it
+            prefs.haptics = it
+            haptics.tick()
+        }
+        ChoiceRow(
+            "Idioma do app",
+            listOf("Sistema" to "system", "Português" to "pt", "English" to "en", "Español" to "es"),
+            uiLang,
+        ) {
+            haptics.tick()
+            uiLang = it
+            prefs.uiLang = it
+            Strings.apply(it)
         }
         ChoiceRow("Idioma das listas", listOf("PT" to "pt", "EN" to "en", "ES" to "es", "Todos" to "all"), lang) {
             lang = it
@@ -197,6 +264,8 @@ fun SettingsScreen(onBack: () -> Unit) {
         }
 
         SettingsSection("DADOS")
+        ActionRow("Salvar backup dos meus dados") { exportLauncher.launch("BetterKick-backup.json") }
+        ActionRow("Restaurar backup") { importLauncher.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }
         ActionRow("Limpar histórico de lives") {
             prefs.clearHistory()
             toast("Histórico limpo.")
@@ -235,7 +304,7 @@ fun SettingsScreen(onBack: () -> Unit) {
             if (report == null) toast("Nenhuma falha registrada.") else crash = report
         }
         Text(
-            "BetterKick ${Updater.installedVersion(context)} • cliente não oficial da Kick\nUsa endereços não oficiais do site, que podem mudar sem aviso.",
+            tr("BetterKick %s • cliente não oficial da Kick\nUsa endereços não oficiais do site, que podem mudar sem aviso.").format(Updater.installedVersion(context)),
             fontSize = 12.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(16.dp),
@@ -276,9 +345,9 @@ private fun formatAgo(thenMs: Long): String {
     val minutes = ((System.currentTimeMillis() - thenMs) / 60_000).coerceAtLeast(0)
     return when {
         minutes < 1 -> "agora há pouco"
-        minutes < 60 -> "há $minutes min"
-        minutes < 60 * 24 -> "há ${minutes / 60} h"
-        else -> "há ${minutes / (60 * 24)} d"
+        minutes < 60 -> tr("há %d min").format(minutes)
+        minutes < 60 * 24 -> tr("há %d h").format(minutes / 60)
+        else -> tr("há %d d").format(minutes / (60 * 24))
     }
 }
 
@@ -449,7 +518,7 @@ fun ChannelScreen(slug: String, onBack: () -> Unit, onWatchLive: () -> Unit, onP
                 Text(error!!, color = MaterialTheme.colorScheme.error)
             }
             else -> LazyVerticalGrid(
-                columns = GridCells.Fixed(2),
+                columns = GridCells.Adaptive(150.dp),
                 contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 32.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
@@ -466,15 +535,15 @@ fun ChannelScreen(slug: String, onBack: () -> Unit, onWatchLive: () -> Unit, onP
                                 )
                                 Column(Modifier.padding(start = 14.dp)) {
                                     Text(p.username, fontWeight = FontWeight.Bold, fontSize = 20.sp)
-                                    Text("${formatViewers(p.followers)} seguidores", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
+                                    Text(tr("%s seguidores").format(formatViewers(p.followers)), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
                                 }
                             }
                             p.bio?.let { Text(it, fontSize = 13.sp, maxLines = 4, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 10.dp)) }
                             if (p.isLive) Button(onClick = onWatchLive, modifier = Modifier.padding(top = 12.dp)) { Text("Assistir ao vivo agora") }
                             else Text("Offline no momento", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp, modifier = Modifier.padding(top = 10.dp))
                             Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                FilterChip(selected = tab == 0, onClick = { tab = 0 }, label = { Text("Clipes (${clips.size}${if (clipCursor != null) "+" else ""})") })
-                                FilterChip(selected = tab == 1, onClick = { tab = 1 }, label = { Text("Transmissões (${vods.size})") })
+                                FilterChip(selected = tab == 0, onClick = { tab = 0 }, label = { Text(tr("Clipes (%s)").format("${clips.size}${if (clipCursor != null) "+" else ""}")) })
+                                FilterChip(selected = tab == 1, onClick = { tab = 1 }, label = { Text(tr("Transmissões (%d)").format(vods.size)) })
                             }
                         }
                     }
@@ -484,9 +553,9 @@ fun ChannelScreen(slug: String, onBack: () -> Unit, onWatchLive: () -> Unit, onP
                     gridItems(clips, key = { it.id }) { c ->
                         MediaCard(
                             c.thumbnail, c.title.ifBlank { "Clipe" },
-                            listOfNotNull(c.creator?.let { "por $it" }, "${formatViewers(c.views)} views").joinToString(" • "),
+                            listOfNotNull(c.creator?.let { tr("por %s").format(it) }, "${formatViewers(c.views)} views").joinToString(" • "),
                             formatDuration(c.durationSec.toLong()),
-                        ) { onPlay(c.url, c.title.ifBlank { "Clipe de ${profile?.username ?: slug}" }) }
+                        ) { onPlay(c.url, c.title.ifBlank { tr("Clipe de %s").format(profile?.username ?: slug) }) }
                     }
                     if (clipCursor != null) item(span = { GridItemSpan(maxLineSpan) }) {
                         TextButton(
@@ -532,19 +601,50 @@ fun VodPlayerScreen(url: String, title: String, onBack: () -> Unit) {
     // Uma live em segundo plano seria um segundo áudio ao mesmo tempo.
     LaunchedEffect(Unit) { PlayerSession.release() }
 
+    val prefs = remember { Prefs(context) }
+    val resumeAt = remember(url) { prefs.vodPosition(url) }
     val player = remember {
         ExoPlayer.Builder(context)
             .setAudioAttributes(AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build(), true)
             .setHandleAudioBecomingNoisy(true)
             .build()
             .apply {
-                setMediaItem(MediaItem.fromUri(url))
+                // Continua de onde você parou (se já tinha assistido um pedaço).
+                setMediaItem(MediaItem.fromUri(url), resumeAt)
                 playWhenReady = true
                 prepare()
             }
     }
+    var speed by remember { mutableStateOf(1f) }
+    var speedMenu by remember { mutableStateOf(false) }
+    // Pulo de 10 s por duplo toque: true = para frente. O contador reinicia a animação a cada toque.
+    var seekFlash by remember { mutableStateOf<Pair<Boolean, Int>?>(null) }
+    var seekCount by remember { mutableIntStateOf(0) }
+    LaunchedEffect(seekFlash) {
+        if (seekFlash != null) {
+            kotlinx.coroutines.delay(650)
+            seekFlash = null
+        }
+    }
+    LaunchedEffect(resumeAt) {
+        if (resumeAt > 0) Toast.makeText(context, tr("Continuando de %s").format(formatDuration(resumeAt / 1000)), Toast.LENGTH_SHORT).show()
+    }
+    fun savePosition() {
+        val duration = player.duration
+        val position = player.currentPosition
+        if (duration == C.TIME_UNSET || duration <= 0) return
+        // Quase no fim (ou começo): não precisa lembrar.
+        if (position < 15_000 || position > duration - 20_000) prefs.clearVodPosition(url) else prefs.setVodPosition(url, position)
+    }
+    LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(5_000)
+            savePosition()
+        }
+    }
     DisposableEffect(Unit) {
         onDispose {
+            savePosition()
             player.release()
             activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         }
@@ -567,7 +667,12 @@ fun VodPlayerScreen(url: String, title: String, onBack: () -> Unit) {
         AndroidView(
             modifier = Modifier.fillMaxSize().then(if (landscape) Modifier else Modifier.statusBarsPadding()),
             factory = { ctx ->
-                PlayerView(ctx).apply {
+                SeekPlayerView(ctx) { forward ->
+                    val delta = if (forward) 10_000L else -10_000L
+                    player.seekTo((player.currentPosition + delta).coerceIn(0L, player.duration.takeIf { it != C.TIME_UNSET } ?: Long.MAX_VALUE))
+                    seekCount++
+                    seekFlash = forward to seekCount
+                }.apply {
                     layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
                     this.player = player
                     useController = true
@@ -588,7 +693,60 @@ fun VodPlayerScreen(url: String, title: String, onBack: () -> Unit) {
             IconButton(onClick = { if (landscape) activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED else onBack() }) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, "Voltar", tint = Color.White)
             }
-            Text(title, color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(title, color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            Box {
+                TextButton(onClick = { speedMenu = true }) {
+                    Text(if (speed == 1f) "1x" else "${speed.toString().removeSuffix(".0")}x", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+                androidx.compose.material3.DropdownMenu(expanded = speedMenu, onDismissRequest = { speedMenu = false }) {
+                    listOf(0.75f, 1f, 1.25f, 1.5f, 2f).forEach { s ->
+                        androidx.compose.material3.DropdownMenuItem(
+                            text = { Text(if (s == speed) "✓ ${s}x" else "${s}x") },
+                            onClick = {
+                                speed = s
+                                player.setPlaybackSpeed(s)
+                                speedMenu = false
+                            },
+                        )
+                    }
+                }
+            }
+        }
+        // Feedback do duplo toque: "+10 s" à direita, "−10 s" à esquerda.
+        seekFlash?.let { (forward, _) ->
+            Text(
+                if (forward) "+10 s" else "−10 s",
+                color = Color.White,
+                fontWeight = FontWeight.Bold,
+                fontSize = 18.sp,
+                modifier = Modifier
+                    .align(if (forward) Alignment.CenterEnd else Alignment.CenterStart)
+                    .padding(horizontal = 48.dp)
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(Color(0x99000000))
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+            )
         }
     }
+}
+
+/** PlayerView que entende duplo toque (metade esquerda volta 10 s, direita avança 10 s). */
+@OptIn(UnstableApi::class)
+private class SeekPlayerView(context: Context, private val onSeek: (forward: Boolean) -> Unit) : PlayerView(context) {
+    private val detector = android.view.GestureDetector(
+        context,
+        object : android.view.GestureDetector.SimpleOnGestureListener() {
+            override fun onDown(e: android.view.MotionEvent) = true
+
+            // Toque simples continua mostrando/escondendo os controles.
+            override fun onSingleTapConfirmed(e: android.view.MotionEvent): Boolean = performClick()
+
+            override fun onDoubleTap(e: android.view.MotionEvent): Boolean {
+                onSeek(e.x > width / 2f)
+                return true
+            }
+        },
+    )
+
+    override fun onTouchEvent(event: android.view.MotionEvent): Boolean = detector.onTouchEvent(event) || super.onTouchEvent(event)
 }

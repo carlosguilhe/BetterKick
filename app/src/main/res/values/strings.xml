@@ -7,4 +7,10 @@
     <string name="shortcut_featured_long">Lives em destaque</string>
     <string name="shortcut_categories">Categorias</string>
     <string name="shortcut_categories_long">Categorias</string>
+    <string name="widget_title">Seguindo ao vivo</string>
+    <string name="widget_description">Quem você segue que está ao vivo agora</string>
+    <string name="widget_loading">Carregando…</string>
+    <string name="widget_login">Entre na conta para ver quem você segue.</string>
+    <string name="widget_none">Ninguém que você segue está ao vivo agora.</string>
+    <string name="widget_error">Não consegui atualizar. Toque para abrir o app.</string>
 </resources>

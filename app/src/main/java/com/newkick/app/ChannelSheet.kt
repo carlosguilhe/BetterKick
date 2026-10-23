@@ -1,7 +1,6 @@
 package com.newkick.app
 
 import android.content.Intent
-import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -9,7 +8,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -39,6 +37,7 @@ fun ChannelActionsSheet(
     onOpen: (String) -> Unit,
     onOpenChannel: (String) -> Unit,
     onFollowChanged: () -> Unit,
+    onOpenMulti: (String, String) -> Unit = { _, _ -> },
 ) {
     val context = LocalContext.current
     val prefs = remember { Prefs(context) }
@@ -58,6 +57,21 @@ fun ChannelActionsSheet(
             SheetAction("Assistir") {
                 onDismiss()
                 onOpen(target.slug)
+            }
+            // Duas lives ao mesmo tempo: escolhe a primeira aqui, segura a segunda em outro card.
+            val first = MultiViewState.pending
+            if (first != null && first.slug != target.slug) {
+                SheetAction(tr("Assistir lado a lado com %s").format(first.username)) {
+                    MultiViewState.pending = null
+                    onDismiss()
+                    onOpenMulti(first.slug, target.slug)
+                }
+            } else {
+                SheetAction(if (first != null) "Cancelar lado a lado" else "Assistir lado a lado (escolher a 2ª live)") {
+                    MultiViewState.pending = if (first != null) null else target
+                    if (first == null) Toast.makeText(context, "Agora segure o card da segunda live.", Toast.LENGTH_LONG).show()
+                    onDismiss()
+                }
             }
             SheetAction("Clipes e transmissões anteriores") {
                 onDismiss()
@@ -79,9 +93,9 @@ fun ChannelActionsSheet(
                         if (status in 200..299) {
                             followed = want
                             onFollowChanged()
-                            Toast.makeText(context, if (want) "Agora você segue ${target.username}." else "Você deixou de seguir ${target.username}.", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, tr(if (want) "Agora você segue %s." else "Você deixou de seguir %s.").format(target.username), Toast.LENGTH_SHORT).show()
                         } else {
-                            Toast.makeText(context, "Não foi possível alterar (código $status).", Toast.LENGTH_LONG).show()
+                            Toast.makeText(context, tr("Não foi possível alterar (código %d).").format(status), Toast.LENGTH_LONG).show()
                         }
                         busy = false
                     }

@@ -82,7 +82,6 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -92,7 +91,6 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.rememberCoroutineScope
-import android.widget.Toast
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -143,11 +141,28 @@ object PlayerState {
     var pipAllowed = false
 }
 
+const val ACTION_PIP_TOGGLE = "com.newkick.app.PIP_TOGGLE"
+
+/** Janela do PiP com 16:9 e um botão de pausar/tocar. */
+fun pipParams(context: Context, playing: Boolean): PictureInPictureParams {
+    val builder = PictureInPictureParams.Builder().setAspectRatio(Rational(16, 9))
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        val label = if (playing) "Pausar" else "Tocar"
+        val toggle = android.app.PendingIntent.getBroadcast(
+            context,
+            0,
+            android.content.Intent(ACTION_PIP_TOGGLE).setPackage(context.packageName),
+            android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        val icon = android.graphics.drawable.Icon.createWithResource(context, if (playing) R.drawable.ic_pip_pause else R.drawable.ic_pip_play)
+        builder.setActions(listOf(android.app.RemoteAction(icon, label, label, toggle)))
+    }
+    return builder.build()
+}
+
 fun enterPip(activity: android.app.Activity) {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-        activity.enterPictureInPictureMode(
-            PictureInPictureParams.Builder().setAspectRatio(Rational(16, 9)).build(),
-        )
+        activity.enterPictureInPictureMode(pipParams(activity, PlayerSession.playing))
     }
 }
 
@@ -274,6 +289,10 @@ internal fun createPlayer(
     lockQuality: Boolean,
     initialBps: Long,
     channel: ChannelInfo? = null,
+    /** Altura máxima do vídeo (0 = sem limite). Usado no multi-view para pesar menos. */
+    capHeight: Int = 0,
+    /** false quando há mais de um player (multi-view): senão um tira o foco de áudio do outro. */
+    audioFocus: Boolean = true,
 ): PlayerHolder {
     val meter = DefaultBandwidthMeter.Builder(context).apply {
         if (initialBps > 0) setInitialBitrateEstimate(initialBps)
@@ -283,10 +302,14 @@ internal fun createPlayer(
     // altos fariam a qualidade nunca subir.
     val increaseMs = (latencyMs * 35 / 100).coerceIn(2_000, 8_000)
     val decreaseMs = (latencyMs * 60 / 100).coerceIn(3_000, 10_000)
+    // Economia de dados: em rede móvel, o modo automático não passa de 480p (escolher uma qualidade à mão ainda vale).
+    val saveData = Prefs(context).dataSaver &&
+        context.getSystemService(android.net.ConnectivityManager::class.java)?.isActiveNetworkMetered == true
+    val cap = if (capHeight > 0) capHeight else if (saveData) 480 else 0
     val trackSelector = DefaultTrackSelector(context, AdaptiveTrackSelection.Factory(increaseMs, decreaseMs, increaseMs, 0.75f)).apply {
         parameters = buildUponParameters()
             .setViewportSize(Int.MAX_VALUE, Int.MAX_VALUE, false)
-            .setMaxVideoSize(Int.MAX_VALUE, Int.MAX_VALUE)
+            .setMaxVideoSize(if (cap > 0) cap * 16 / 9 else Int.MAX_VALUE, if (cap > 0) cap else Int.MAX_VALUE)
             .setMaxVideoBitrate(Int.MAX_VALUE)
             .setForceHighestSupportedBitrate(lockQuality)
             .setExceedVideoConstraintsIfNecessary(true)
@@ -302,7 +325,7 @@ internal fun createPlayer(
         .setBandwidthMeter(meter)
         .setAudioAttributes(
             AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build(),
-            true,
+            audioFocus,
         )
         .setHandleAudioBecomingNoisy(true)
         .build()
@@ -366,7 +389,9 @@ private fun PlayerContent(
     }
 
     val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
+    val haptics = rememberHaptics()
     val toggleFavorite = {
+        haptics.confirm()
         favorite = prefs.toggleFavorite(channel.slug)
         if (favorite) {
             // Já está ao vivo agora: não precisa avisar de novo.
@@ -583,14 +608,14 @@ private fun PlayerContent(
     val adjustBrightness: (Float) -> Unit = { delta ->
         brightness = (brightness + delta).coerceIn(0.02f, 1f)
         activity?.window?.let { w -> w.attributes = w.attributes.also { it.screenBrightness = brightness } }
-        hud = "Brilho ${(brightness * 100).toInt()}%"
+        hud = tr("Brilho %d%%").format((brightness * 100).toInt())
         hudVersion++
     }
     val adjustVolume: (Float) -> Unit = { delta ->
         volume = (volume + delta).coerceIn(0f, 1f)
         val max = audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
         audio.setStreamVolume(AudioManager.STREAM_MUSIC, Math.round(volume * max), 0)
-        hud = "Volume ${(volume * 100).toInt()}%"
+        hud = tr("Volume %d%%").format((volume * 100).toInt())
         hudVersion++
     }
     val dragY = remember { Animatable(0f) }
@@ -718,7 +743,7 @@ private fun PlayerContent(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text("Conexão lenta para essa qualidade.", color = Color.White, fontSize = 12.sp, modifier = Modifier.weight(1f, fill = false))
-                        TextButton(onClick = { setQuality(s.height) }) { Text("Usar ${s.label}", color = KickGreen, fontSize = 12.sp) }
+                        TextButton(onClick = { setQuality(s.height) }) { Text(tr("Usar %s").format(s.label), color = KickGreen, fontSize = 12.sp) }
                         TextButton(onClick = { bannerDismissed = true }) { Text("Ignorar", color = Color.LightGray, fontSize = 12.sp) }
                     }
                 }
@@ -963,9 +988,9 @@ private fun PlayerContent(
                     Text(
                         listOfNotNull(
                             channel.username,
-                            "${formatViewers(channel.viewers)} assistindo",
+                            tr("%s assistindo").format(formatViewers(channel.viewers)),
                             channel.category?.takeIf { it.isNotBlank() },
-                            channel.startedAtMs?.let { "ao vivo há ${formatElapsed(nowMs - it)}" },
+                            channel.startedAtMs?.let { tr("ao vivo há %s").format(formatElapsed(nowMs - it)) },
                         ).joinToString(" • "),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 12.sp,
@@ -997,7 +1022,7 @@ private fun PlayerContent(
                                         val reason = when (status) {
                                             ChatWeb.STATUS_NO_PAGE -> "Aguarde o chat carregar e tente de novo."
                                             ChatWeb.STATUS_NO_SESSION -> "Entre na sua conta primeiro."
-                                            else -> "Não foi possível ${if (want) "seguir" else "deixar de seguir"} (código $status)."
+                                            else -> tr(if (want) "Não foi possível seguir (código %d)." else "Não foi possível deixar de seguir (código %d).").format(status)
                                         }
                                         Toast.makeText(context, reason, Toast.LENGTH_LONG).show()
                                     }
@@ -1010,7 +1035,7 @@ private fun PlayerContent(
                 IconButton(onClick = {
                     val send = Intent(Intent.ACTION_SEND).apply {
                         type = "text/plain"
-                        putExtra(Intent.EXTRA_TEXT, "${channel.username} está ao vivo na Kick: https://kick.com/${channel.slug}")
+                        putExtra(Intent.EXTRA_TEXT, tr("%s está ao vivo na Kick: %s").format(channel.username, "https://kick.com/${channel.slug}"))
                     }
                     context.startActivity(Intent.createChooser(send, "Compartilhar canal"))
                 }) {

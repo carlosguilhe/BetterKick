@@ -68,7 +68,7 @@ object PlayerSession {
             if (++failures <= 3) {
                 reload()
             } else {
-                errorMessage = "Erro de reprodução: ${error.errorCodeName}"
+                errorMessage = tr("Erro de reprodução: %s").format(error.errorCodeName)
             }
         }
     }

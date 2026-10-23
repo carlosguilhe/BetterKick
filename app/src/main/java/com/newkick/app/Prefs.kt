@@ -58,10 +58,25 @@ class Prefs(context: Context) {
         get() = sp.getString("lang", "pt") ?: "pt"
         set(v) = sp.edit().putString("lang", v).apply()
 
+    /** Idioma do app: "system", "pt", "en" ou "es". */
+    var uiLang: String
+        get() = sp.getString("ui_lang", "system") ?: "system"
+        set(v) = sp.edit().putString("ui_lang", v).apply()
+
     /** "dark", "light" ou "system". */
     var themeMode: String
         get() = sp.getString("theme_mode", "dark") ?: "dark"
         set(v) = sp.edit().putString("theme_mode", v).apply()
+
+    /** Usa as cores do papel de parede (Material You, Android 12+) nos fundos e superfícies. */
+    var dynamicColors: Boolean
+        get() = sp.getBoolean("dynamic_colors", false)
+        set(v) = sp.edit().putBoolean("dynamic_colors", v).apply()
+
+    /** Vibração curta ao segurar, trocar de aba e confirmar ações. */
+    var haptics: Boolean
+        get() = sp.getBoolean("haptics", true)
+        set(v) = sp.edit().putBoolean("haptics", v).apply()
 
     var onboarded: Boolean
         get() = sp.getBoolean("onboarded", false)
@@ -178,4 +193,86 @@ class Prefs(context: Context) {
     }
 
     fun clearSearchHistory() = sp.edit().remove("search_history").apply()
+
+    // ---- Retomar clipes e transmissões ----
+
+    /** Onde você parou neste vídeo (ms), ou 0. Guarda os últimos 50. */
+    fun vodPosition(url: String): Long {
+        val arr = runCatching { JSONArray(sp.getString("vod_positions", "[]")) }.getOrDefault(JSONArray())
+        for (i in 0 until arr.length()) {
+            val o = arr.optJSONObject(i) ?: continue
+            if (o.optString("u") == url) return o.optLong("p")
+        }
+        return 0L
+    }
+
+    fun setVodPosition(url: String, positionMs: Long) {
+        val old = runCatching { JSONArray(sp.getString("vod_positions", "[]")) }.getOrDefault(JSONArray())
+        val list = mutableListOf(JSONObject().put("u", url).put("p", positionMs))
+        for (i in 0 until old.length()) {
+            val o = old.optJSONObject(i) ?: continue
+            if (o.optString("u") != url) list += o
+        }
+        sp.edit().putString("vod_positions", JSONArray(list.take(50)).toString()).apply()
+    }
+
+    fun clearVodPosition(url: String) {
+        val old = runCatching { JSONArray(sp.getString("vod_positions", "[]")) }.getOrDefault(JSONArray())
+        val list = (0 until old.length()).mapNotNull { old.optJSONObject(it) }.filter { it.optString("u") != url }
+        sp.edit().putString("vod_positions", JSONArray(list).toString()).apply()
+    }
+
+    // ---- Economia de dados ----
+
+    /** Em rede móvel (4G/5G), limita o modo automático a 480p. */
+    var dataSaver: Boolean
+        get() = sp.getBoolean("data_saver", false)
+        set(v) = sp.edit().putBoolean("data_saver", v).apply()
+
+    // ---- Backup ----
+
+    /**
+     * Tudo que é seu (favoritos, silenciados, histórico, buscas e preferências) em JSON.
+     * O login não entra: ele fica nos cookies do app e não sai do aparelho.
+     */
+    fun exportJson(): String {
+        val out = JSONObject()
+        for ((key, value) in sp.all) {
+            if (key in NOT_BACKED_UP) continue
+            when (value) {
+                is Set<*> -> out.put(key, JSONArray(value.map { it.toString() }))
+                is Boolean, is Int, is Long, is String -> out.put(key, value)
+                is Float -> out.put(key, value.toDouble())
+            }
+        }
+        return JSONObject().put("app", "BetterKick").put("format", 1).put("prefs", out).toString(2)
+    }
+
+    /** Restaura um backup (sobrescreve as chaves que estiverem no arquivo). Devolve false se não for do BetterKick. */
+    fun importJson(json: String): Boolean {
+        val root = runCatching { JSONObject(json) }.getOrNull() ?: return false
+        if (root.optString("app") != "BetterKick") return false
+        val data = root.optJSONObject("prefs") ?: return false
+        val editor = sp.edit()
+        for (key in data.keys()) {
+            if (key in NOT_BACKED_UP) continue
+            when (val v = data.get(key)) {
+                is JSONArray -> editor.putStringSet(key, (0 until v.length()).map { v.getString(it) }.toSet())
+                is Boolean -> editor.putBoolean(key, v)
+                is Int -> editor.putInt(key, v)
+                is Long -> editor.putLong(key, v)
+                is String -> editor.putString(key, v)
+            }
+        }
+        editor.apply()
+        return true
+    }
+
+    private companion object {
+        /** Estado interno que não faz sentido levar para outro aparelho. */
+        val NOT_BACKED_UP = setOf(
+            "last_update_check", "skipped_update", "followed_baseline", "notified_live",
+            "asked_notifications", "bandwidth_bps", "onboarded",
+        )
+    }
 }

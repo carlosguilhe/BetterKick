@@ -31,7 +31,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
-import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -331,7 +330,7 @@ fun ProfileTab(
         }
         SpeedTestRow(Modifier.padding(horizontal = 8.dp))
         Text(
-            "BetterKick ${Updater.installedVersion(context)} • cliente não oficial da Kick",
+            tr("BetterKick %s • cliente não oficial da Kick").format(Updater.installedVersion(context)),
             fontSize = 12.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(start = 16.dp, top = 8.dp),

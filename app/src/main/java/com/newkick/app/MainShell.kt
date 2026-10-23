@@ -65,9 +65,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -133,6 +134,7 @@ fun MainShell(
     onOpenSettings: () -> Unit,
     onOpenHistory: () -> Unit,
     onLoggedOut: () -> Unit,
+    onOpenMulti: (String, String) -> Unit = { _, _ -> },
 ) {
     val context = LocalContext.current
     val prefs = remember { Prefs(context) }
@@ -201,7 +203,11 @@ fun MainShell(
     val reselect: (MainTab) -> Unit = { t -> scrollSignals = scrollSignals + (t to ((scrollSignals[t] ?: 0) + 1)) }
     val followedState = FollowedState(thumbs, followed, followedLoading, followedExpired, followedError)
     val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 100.dp
-    val longPress: (ChannelTarget) -> Unit = { sheetTarget = it }
+    val haptics = rememberHaptics()
+    val longPress: (ChannelTarget) -> Unit = {
+        haptics.press()
+        sheetTarget = it
+    }
 
     Box(Modifier.fillMaxSize()) {
         // Todo o conteúdo é a "fonte" do desfoque da barra.
@@ -238,6 +244,7 @@ fun MainShell(
                 onOpen = onOpen,
                 onOpenChannel = onOpenChannel,
                 onFollowChanged = { refreshTick++ },
+                onOpenMulti = onOpenMulti,
             )
         }
     }
@@ -250,7 +257,7 @@ fun MainShell(
 @Composable
 private fun FloatingNavBar(selected: MainTab, onSelect: (MainTab) -> Unit, onReselect: (MainTab) -> Unit, hazeState: HazeState, modifier: Modifier) {
     val tabs = MainTab.entries
-    val haptic = LocalHapticFeedback.current
+    val haptics = rememberHaptics()
     val shape = RoundedCornerShape(32.dp)
     val circle = 50.dp
     val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
@@ -310,7 +317,7 @@ private fun FloatingNavBar(selected: MainTab, onSelect: (MainTab) -> Unit, onRes
                             if (isSelected) {
                                 onReselect(t)
                             } else {
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                haptics.tick()
                                 onSelect(t)
                             }
                         },
@@ -477,7 +484,7 @@ private fun HomeTab(
                             ).padding(vertical = 10.dp),
                         ) {
                             Text(ch.username, fontWeight = FontWeight.Bold)
-                            Text("${formatViewers(ch.followers)} seguidores", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(tr("%s seguidores").format(formatViewers(ch.followers)), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 }
@@ -490,7 +497,7 @@ private fun HomeTab(
                                 onCategory(cat)
                             }.padding(vertical = 10.dp),
                         ) {
-                            Text("Categoria: ", color = KickGreen, fontSize = 13.sp)
+                            Text(tr("Categoria: "), color = KickGreen, fontSize = 13.sp)
                             Text(cat.name, fontSize = 13.sp)
                         }
                     }
@@ -688,7 +695,7 @@ private fun CategoriesTab(
                 }
                 else -> LazyVerticalGrid(
                     state = gridState,
-                    columns = GridCells.Fixed(2),
+                    columns = GridCells.Adaptive(150.dp),
                     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = bottomInset),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -720,7 +727,7 @@ private fun FollowingTab(
         val live = state.list.count { it.isLive }
         TabHeader(
             title = {
-                Text(if (loggedIn && live > 0) "Seguindo ($live ao vivo)" else "Seguindo", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                Text(if (loggedIn && live > 0) "${tr("Seguindo")} ($live ${tr("ao vivo")})" else "Seguindo", fontSize = 22.sp, fontWeight = FontWeight.Bold)
             },
             onRefresh = if (loggedIn) onRefresh else null,
         )
@@ -759,7 +766,7 @@ private fun FollowingTab(
                     val offline = filtered.filter { !it.isLive }
                     LazyVerticalGrid(
                         state = gridState,
-                        columns = GridCells.Fixed(2),
+                        columns = GridCells.Adaptive(150.dp),
                         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = bottomInset),
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalArrangement = Arrangement.spacedBy(14.dp),
@@ -832,6 +839,7 @@ private fun FeaturedTab(
 @Composable
 fun PullRefresh(onRefresh: () -> Unit, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
     var refreshing by remember { mutableStateOf(false) }
+    val pullState = rememberPullToRefreshState()
     LaunchedEffect(refreshing) {
         if (refreshing) {
             delay(1_000)
@@ -845,5 +853,24 @@ fun PullRefresh(onRefresh: () -> Unit, modifier: Modifier = Modifier, content: @
             onRefresh()
         },
         modifier = modifier,
+        state = pullState,
+        // Indicador com a logo BK: aparece e cresce conforme você puxa.
+        indicator = {
+            val fraction = pullState.distanceFraction.coerceIn(0f, 1.2f)
+            if (refreshing || fraction > 0f) {
+                KLoader(
+                    Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = 8.dp)
+                        .graphicsLayer {
+                            translationY = (if (refreshing) 1f else fraction) * 56.dp.toPx()
+                            alpha = if (refreshing) 1f else fraction.coerceAtMost(1f)
+                            scaleX = 0.6f + 0.4f * fraction.coerceAtMost(1f)
+                            scaleY = scaleX
+                        },
+                    size = 40.dp,
+                )
+            }
+        },
     ) { content() }
 }

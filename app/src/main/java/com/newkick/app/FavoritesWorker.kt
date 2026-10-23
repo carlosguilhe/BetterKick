@@ -28,6 +28,7 @@ class FavoritesWorker(context: Context, params: WorkerParameters) : CoroutineWor
 
     override suspend fun doWork(): Result {
         KickApi.init(applicationContext)
+        Strings.init(applicationContext)
         val prefs = Prefs(applicationContext)
         val muted = prefs.mutedChannels()
         val favorites = if (prefs.notifyFavorites) prefs.favorites() else emptyList()
@@ -65,6 +66,7 @@ class FavoritesWorker(context: Context, params: WorkerParameters) : CoroutineWor
             }
         }
         prefs.notifiedLive = state
+        LiveWidget.updateAll(applicationContext)
         return Result.success()
     }
 
@@ -77,7 +79,7 @@ class FavoritesWorker(context: Context, params: WorkerParameters) : CoroutineWor
         val manager = context.getSystemService(NotificationManager::class.java)
         if (Build.VERSION.SDK_INT >= 26) {
             manager.createNotificationChannel(
-                NotificationChannel(CHANNEL_ID, "Favoritos ao vivo", NotificationManager.IMPORTANCE_DEFAULT),
+                NotificationChannel(CHANNEL_ID, tr("Favoritos ao vivo"), NotificationManager.IMPORTANCE_DEFAULT),
             )
         }
         val open = Intent(context, MainActivity::class.java).apply {
@@ -88,18 +90,39 @@ class FavoritesWorker(context: Context, params: WorkerParameters) : CoroutineWor
         val pending = PendingIntent.getActivity(
             context, slug.hashCode(), open, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
+        val mute = PendingIntent.getBroadcast(
+            context,
+            slug.hashCode(),
+            Intent(context, LiveActionReceiver::class.java).setAction(LiveActionReceiver.ACTION_MUTE).putExtra(LiveActionReceiver.EXTRA_SLUG, slug),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_media_play)
-            .setContentTitle("$username está ao vivo")
+            .setSmallIcon(R.drawable.ic_kick_k)
+            .setContentTitle(tr("%s está ao vivo").format(username))
             .setContentText(text)
             .setContentIntent(pending)
             .setAutoCancel(true)
+            .setGroup(GROUP)
+            .addAction(0, tr("Assistir"), pending)
+            .addAction(0, tr("Silenciar"), mute)
             .build()
-        NotificationManagerCompat.from(context).notify(slug.hashCode(), notification)
+        // Com várias lives avisadas, o Android junta tudo numa pilha só.
+        val summary = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_kick_k)
+            .setContentTitle(tr("Lives ao vivo"))
+            .setGroup(GROUP)
+            .setGroupSummary(true)
+            .setAutoCancel(true)
+            .build()
+        val manager2 = NotificationManagerCompat.from(context)
+        manager2.notify(slug.hashCode(), notification)
+        manager2.notify(SUMMARY_ID, summary)
     }
 
     companion object {
         private const val CHANNEL_ID = "live"
+        private const val GROUP = "live-group"
+        private const val SUMMARY_ID = 7001
         private const val WORK_NAME = "favorites-live"
 
         fun schedule(context: Context) {

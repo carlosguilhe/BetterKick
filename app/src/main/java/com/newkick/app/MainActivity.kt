@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -33,6 +32,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.togetherWith
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.Lifecycle
 
@@ -75,19 +82,46 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    // Botão de pausar/tocar na janela do PiP.
+    private val pipReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action != ACTION_PIP_TOGGLE) return
+            PlayerSession.togglePlay()
+            // O estado do player muda um instante depois: atualiza o ícone da janela.
+            window.decorView.postDelayed({
+                if (isInPictureInPictureMode) setPictureInPictureParams(pipParams(this@MainActivity, PlayerSession.playing))
+            }, 350)
+        }
+    }
+
+    override fun onDestroy() {
+        runCatching { unregisterReceiver(pipReceiver) }
+        super.onDestroy()
+    }
+
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
         if (PlayerState.pipAllowed) enterPip(this)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Abertura: a logo BK cresce um pouco e some, revelando o app.
+        installSplashScreen().setOnExitAnimationListener { splash ->
+            splash.view.animate().alpha(0f).scaleX(1.12f).scaleY(1.12f).setDuration(260)
+                .withEndAction { splash.remove() }.start()
+        }
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         KickApi.init(this)
         CrashLogger.install(this)
         ThemeState.mode = Prefs(this).themeMode
+        ThemeState.dynamic = Prefs(this).dynamicColors
+        Strings.init(this)
         linkedSlug.value = slugFrom(intent)
         linkedTab.value = tabFrom(intent)
+        androidx.core.content.ContextCompat.registerReceiver(
+            this, pipReceiver, android.content.IntentFilter(ACTION_PIP_TOGGLE), androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
         FavoritesWorker.schedule(this)
         if (intent?.action == ACTION_CHECK_FAVORITES) FavoritesWorker.checkNow(this)
         setContent {
@@ -119,6 +153,10 @@ class MainActivity : ComponentActivity() {
     private fun tabFrom(intent: Intent?): String? =
         if (intent?.action == ACTION_OPEN_TAB) intent.getStringExtra("tab")?.takeIf { t -> MainTab.entries.any { it.name == t } } else null
 }
+
+/** Telas "de detalhe" (vídeo e canal): entram crescendo em vez de só esmaecer. */
+private fun isDetailRoute(route: String) =
+    route.startsWith("player:") || route.startsWith("vod:") || route.startsWith("channel:") || route.startsWith("multi:")
 
 /** Telas de vídeo ficam sempre no tema escuro, mesmo com o app em tema claro. */
 @Composable
@@ -177,7 +215,7 @@ private fun App(linkedSlug: MutableState<String?>, linkedTab: MutableState<Strin
     val navInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
     // Ícones da barra de status: claros no escuro, escuros no claro (vídeo é sempre escuro).
-    val dark = LocalIsDark.current || onPlayer || onVod
+    val dark = LocalIsDark.current || onPlayer || onVod || route.startsWith("multi:")
     val view = LocalView.current
     SideEffect {
         (view.context as? Activity)?.window?.let { w ->
@@ -188,73 +226,95 @@ private fun App(linkedSlug: MutableState<String?>, linkedTab: MutableState<Strin
     }
 
     Box(Modifier.fillMaxSize()) {
-        when {
-            onPlayer -> DarkScreen {
-                PlayerScreen(
-                    slug = route.removePrefix("player:"),
-                    // Voltar: a live segue tocando no mini player.
-                    onMinimize = { route = "home" },
-                    onClose = {
-                        PlayerSession.release()
+        // Troca de tela com transição: telas de vídeo/canal crescem e esmaecem; o resto só esmaece.
+        AnimatedContent(
+            targetState = route,
+            transitionSpec = {
+                val toDetail = isDetailRoute(targetState)
+                val fromDetail = isDetailRoute(initialState)
+                when {
+                    toDetail && !fromDetail ->
+                        (fadeIn(tween(240)) + scaleIn(tween(240), initialScale = 0.92f)) togetherWith fadeOut(tween(160))
+                    !toDetail && fromDetail ->
+                        fadeIn(tween(220)) togetherWith (fadeOut(tween(200)) + scaleOut(tween(200), targetScale = 0.96f))
+                    else -> fadeIn(tween(200)) togetherWith fadeOut(tween(120))
+                }
+            },
+            label = "route",
+        ) { current ->
+            when {
+                current.startsWith("player:") -> DarkScreen {
+                    PlayerScreen(
+                        slug = current.removePrefix("player:"),
+                        // Voltar: a live segue tocando no mini player.
+                        onMinimize = { route = "home" },
+                        onClose = {
+                            PlayerSession.release()
+                            route = "home"
+                        },
+                        // Canal offline: mostra a página dele (clipes e transmissões anteriores).
+                        onOffline = { route = "channel:$it" },
+                    )
+                }
+                current.startsWith("multi:") -> DarkScreen {
+                    val (a, b) = current.removePrefix("multi:").split("|", limit = 2).let { it[0] to it.getOrElse(1) { "" } }
+                    MultiViewScreen(a, b, onBack = { route = "home" })
+                }
+                current.startsWith("vod:") -> DarkScreen {
+                    val (url, title) = current.removePrefix("vod:").split("|", limit = 2).let { it[0] to it.getOrElse(1) { "" } }
+                    VodPlayerScreen(url = url, title = title, onBack = { route = vodBack })
+                }
+                current.startsWith("channel:") -> {
+                    val slug = current.removePrefix("channel:")
+                    ChannelScreen(
+                        slug = slug,
+                        onBack = { route = "home" },
+                        onWatchLive = { route = "player:$slug" },
+                        onPlay = { url, title ->
+                            vodBack = "channel:$slug"
+                            route = "vod:$url|$title"
+                        },
+                    )
+                }
+                current == "settings" -> SettingsScreen(onBack = {
+                    tabName = MainTab.PROFILE.name
+                    route = "home"
+                })
+                current == "history" -> HistoryScreen(
+                    onBack = {
+                        tabName = MainTab.PROFILE.name
                         route = "home"
                     },
-                    // Canal offline: mostra a página dele (clipes e transmissões anteriores).
-                    onOffline = { route = "channel:$it" },
+                    onOpen = { route = "player:$it" },
                 )
-            }
-            onVod -> DarkScreen {
-                val (url, title) = route.removePrefix("vod:").split("|", limit = 2).let { it[0] to it.getOrElse(1) { "" } }
-                VodPlayerScreen(url = url, title = title, onBack = { route = vodBack })
-            }
-            route.startsWith("channel:") -> {
-                val slug = route.removePrefix("channel:")
-                ChannelScreen(
-                    slug = slug,
-                    onBack = { route = "home" },
-                    onWatchLive = { route = "player:$slug" },
-                    onPlay = { url, title ->
-                        vodBack = "channel:$slug"
-                        route = "vod:$url|$title"
+                current == "onboarding" -> OnboardingScreen(onDone = {
+                    prefs.onboarded = true
+                    route = "home"
+                })
+                current == "login" -> LoginScreen(
+                    onDone = {
+                        tabName = MainTab.PROFILE.name
+                        route = "home"
                     },
+                    onCancel = { route = "home" },
+                )
+                current.startsWith("site:") -> {
+                    val (title, url) = current.removePrefix("site:").split("|", limit = 2)
+                    SiteScreen(url = url, title = title, onBack = { route = "home" })
+                }
+                else -> MainShell(
+                    tab = tab,
+                    onTab = { tabName = it.name },
+                    onOpen = { route = "player:$it" },
+                    onOpenChannel = { route = "channel:$it" },
+                    onLogin = { route = "login" },
+                    onOpenSite = { url, title -> route = "site:$title|$url" },
+                    onOpenSettings = { route = "settings" },
+                    onOpenHistory = { route = "history" },
+                    onLoggedOut = { tabName = MainTab.HOME.name },
+                    onOpenMulti = { a, b -> route = "multi:$a|$b" },
                 )
             }
-            route == "settings" -> SettingsScreen(onBack = {
-                tabName = MainTab.PROFILE.name
-                route = "home"
-            })
-            route == "history" -> HistoryScreen(
-                onBack = {
-                    tabName = MainTab.PROFILE.name
-                    route = "home"
-                },
-                onOpen = { route = "player:$it" },
-            )
-            route == "onboarding" -> OnboardingScreen(onDone = {
-                prefs.onboarded = true
-                route = "home"
-            })
-            route == "login" -> LoginScreen(
-                onDone = {
-                    tabName = MainTab.PROFILE.name
-                    route = "home"
-                },
-                onCancel = { route = "home" },
-            )
-            route.startsWith("site:") -> {
-                val (title, url) = route.removePrefix("site:").split("|", limit = 2)
-                SiteScreen(url = url, title = title, onBack = { route = "home" })
-            }
-            else -> MainShell(
-                tab = tab,
-                onTab = { tabName = it.name },
-                onOpen = { route = "player:$it" },
-                onOpenChannel = { route = "channel:$it" },
-                onLogin = { route = "login" },
-                onOpenSite = { url, title -> route = "site:$title|$url" },
-                onOpenSettings = { route = "settings" },
-                onOpenHistory = { route = "history" },
-                onLoggedOut = { tabName = MainTab.HOME.name },
-            )
         }
         // Só aparece na tela inicial, para não interromper uma live.
         update?.takeIf { route == "home" }?.let { release ->

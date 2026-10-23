@@ -149,7 +149,7 @@ object KickApi {
                 response.code == 401 && auth -> throw KickSessionExpired()
                 response.code == 404 -> throw KickException("Canal não encontrado.", 404)
                 response.code == 403 -> throw KickException("A Kick bloqueou a requisição (403).", 403)
-                !response.isSuccessful -> throw KickException("Erro HTTP ${response.code}.", response.code)
+                !response.isSuccessful -> throw KickException(tr("Erro HTTP %d.").format(response.code), response.code)
             }
             return response.body?.string().orEmpty()
         }

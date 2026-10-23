@@ -37,6 +37,9 @@
 - **Mini player** arrastável (arraste para fora ou toque no X para fechar), **Picture-in-Picture** e **áudio em segundo plano** com controles na notificação.
 - **Chat** abaixo do vídeo, ao lado (paisagem) ou **sobre o vídeo**, com gestos de brilho e volume na tela cheia.
 - **Reconexão automática** quando a internet cai e volta.
+- **Lives lado a lado**: duas lives ao mesmo tempo (segure um card → "Assistir lado a lado"), com som em uma de cada vez.
+- **Economia de dados**: no 4G/5G o modo automático não passa de 480p.
+- Botão de **pausar dentro do Picture-in-Picture**.
 
 ### 👤 Conta e social
 - Login pela página da Kick (inclusive com Google).
@@ -48,11 +51,14 @@
 ### 🔎 Descobrir
 - Início com **Em alta agora**, categorias populares e mais lives, por idioma.
 - **Busca** de canais e categorias, com histórico e filtros.
-- **Página do canal** com **clipes** e **transmissões anteriores**.
+- **Página do canal** com **clipes** e **transmissões anteriores**, com duplo toque para pular 10 s, velocidade de reprodução e retomar de onde você parou.
+- **Widget** de tela inicial com quem você segue que está ao vivo.
 
 ### 🎨 Interface
 - Barra de navegação **flutuante com desfoque**, tema **escuro, claro ou do sistema**, atalhos no ícone do app e tela de boas-vindas.
 - Funciona com o **cache** das listas quando você está sem internet.
+- **Português, inglês e espanhol**, abertura animada, vibração leve, cores do sistema (Material You) e **backup** dos seus dados em um arquivo.
+- Avisos de live com botões **Assistir** e **Silenciar**.
 
 ## Instalar
 

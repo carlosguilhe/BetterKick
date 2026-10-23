@@ -1,0 +1,16 @@
+<resources>
+    <string name="app_name">BetterKick</string>
+    <string name="notification_channel_playback">Live playback</string>
+    <string name="shortcut_following">Following</string>
+    <string name="shortcut_following_long">Who I follow</string>
+    <string name="shortcut_featured">Featured</string>
+    <string name="shortcut_featured_long">Featured lives</string>
+    <string name="shortcut_categories">Categories</string>
+    <string name="shortcut_categories_long">Categories</string>
+    <string name="widget_title">Following live</string>
+    <string name="widget_description">The channels you follow that are live right now</string>
+    <string name="widget_loading">Loading…</string>
+    <string name="widget_login">Sign in to see who you follow.</string>
+    <string name="widget_none">Nobody you follow is live right now.</string>
+    <string name="widget_error">Couldn\'t update. Tap to open the app.</string>
+</resources>

@@ -14,11 +14,13 @@
         android:roundIcon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:supportsRtl="true"
+        android:enableOnBackInvokedCallback="true"
         android:theme="@style/Theme.NewKick">
 
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:theme="@style/Theme.NewKick.Starting"
             android:launchMode="singleTask"
             android:supportsPictureInPicture="true"
             android:resizeableActivity="true"
@@ -36,6 +38,16 @@
                 <data android:scheme="https" android:host="kick.com" />
             </intent-filter>
         </activity>
+
+        <receiver android:name=".LiveActionReceiver" android:exported="false" />
+
+        <!-- Widget da tela inicial: quem você segue ao vivo agora. -->
+        <receiver android:name=".LiveWidget" android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_following_info" />
+        </receiver>
 
         <!-- Entrega o APK baixado ao instalador do Android (atualização pelo GitHub). -->
         <provider
