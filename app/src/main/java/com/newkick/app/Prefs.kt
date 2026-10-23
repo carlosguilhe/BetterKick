@@ -342,6 +342,20 @@ class Prefs(context: Context) {
         return if (quietStart < quietEnd) hour in quietStart until quietEnd else hour >= quietStart || hour < quietEnd
     }
 
+    /** Última versão cuja tela "Novidades" você já viu ("" = nunca). */
+    var lastSeenVersion: String
+        get() = sp.getString("last_seen_version", "") ?: ""
+        set(v) = sp.edit().putString("last_seen_version", v).apply()
+
+    /** Remove uma live do histórico. */
+    fun removeHistory(slug: String) {
+        val arr = JSONArray()
+        history().filter { it.slug != slug }.forEach {
+            arr.put(JSONObject().put("slug", it.slug).put("username", it.username).put("category", it.category ?: "").put("at", it.at))
+        }
+        sp.edit().putString("history", arr.toString()).apply()
+    }
+
     /** Tamanho do texto do chat, em % (85 a 150). */
     var chatZoom: Int
         get() = sp.getInt("chat_zoom", 100)

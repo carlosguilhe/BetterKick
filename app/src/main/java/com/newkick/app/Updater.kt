@@ -6,6 +6,7 @@ import android.net.Uri
 import android.provider.Settings
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.LinearProgressIndicator
@@ -92,6 +93,38 @@ object Updater {
         }
     }
 
+    /** Notas da Release da versão instalada ("v1.7"), ou null (sem rede, sem Release). */
+    suspend fun notesFor(version: String): String? = withContext(Dispatchers.IO) {
+        runCatching {
+            val request = Request.Builder()
+                .url("https://api.github.com/repos/$REPO/releases/tags/v$version")
+                .header("Accept", "application/vnd.github+json")
+                .build()
+            http.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return@use null
+                JSONObject(response.body?.string().orEmpty()).optString("body").takeIf { it.isNotBlank() }
+            }
+        }.getOrNull()
+    }
+
+    /** Tira a marcação do Markdown para mostrar as notas como texto simples. */
+    fun plainNotes(markdown: String): String = markdown
+        .lineSequence()
+        .map { it.trim() }
+        .filterNot { it.startsWith("Atualiza por cima") || it.startsWith("# BetterKick") }
+        .map { line ->
+            val clean = line.replace("**", "").replace(Regex("\\[([^\\]]+)]\\([^)]*\\)"), "$1")
+            when {
+                clean.startsWith("## ") -> clean.removePrefix("## ").uppercase() // seção
+                clean.startsWith("### ") -> clean.removePrefix("### ")
+                clean.startsWith("- ") -> "• " + clean.removePrefix("- ")
+                else -> clean
+            }
+        }
+        .joinToString("\n")
+        .replace(Regex("\n{3,}"), "\n\n")
+        .trim()
+
     /** Baixa o APK e abre o instalador do Android (que confere se a assinatura é a mesma do app). */
     suspend fun downloadAndInstall(context: Context, release: Release) {
         if (busy) return
@@ -157,6 +190,22 @@ object Updater {
                 .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK),
         )
     }
+}
+
+/** "Novidades da versão X": as notas da Release, em texto simples e com rolagem. */
+@Composable
+fun WhatsNewDialog(notes: String, onDone: () -> Unit) {
+    val context = LocalContext.current
+    AlertDialog(
+        onDismissRequest = onDone,
+        title = { Text(tr("Novidades da versão %s").format(Updater.installedVersion(context))) },
+        text = {
+            Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())) {
+                androidx.compose.material3.Text(notes, fontSize = 13.sp)
+            }
+        },
+        confirmButton = { TextButton(onClick = onDone) { Text("Entendi") } },
+    )
 }
 
 /** Aviso de versão nova: baixa e instala ao tocar em Atualizar. */

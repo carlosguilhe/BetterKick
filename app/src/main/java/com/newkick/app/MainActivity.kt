@@ -10,6 +10,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -198,6 +199,19 @@ private fun App(linkedSlug: MutableState<String?>, linkedTab: MutableState<Strin
         }
     }
 
+    // "Novidades" depois de atualizar: mostra as notas da Release da versão instalada, uma vez.
+    var whatsNew by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) {
+        val current = Updater.installedVersion(context)
+        if (prefs.lastSeenVersion == current) return@LaunchedEffect
+        if (!prefs.onboarded) {
+            // Instalação nova: nada de "novidades".
+            prefs.lastSeenVersion = current
+            return@LaunchedEffect
+        }
+        Updater.notesFor(current)?.let { whatsNew = Updater.plainNotes(it) }
+    }
+
     LaunchedEffect(linkedTab.value) {
         linkedTab.value?.let {
             tabName = it
@@ -347,6 +361,13 @@ private fun App(linkedSlug: MutableState<String?>, linkedTab: MutableState<Strin
                 prefs.skippedUpdate = release.version
                 update = null
             })
+        }
+        // Só aparece na tela inicial, para não interromper uma live.
+        whatsNew?.takeIf { route == "home" }?.let { notes ->
+            WhatsNewDialog(notes) {
+                prefs.lastSeenVersion = Updater.installedVersion(context)
+                whatsNew = null
+            }
         }
         crashReport?.let { report ->
             AlertDialog(

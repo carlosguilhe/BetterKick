@@ -147,6 +147,7 @@ fun SettingsScreen(onBack: () -> Unit) {
     var notifyFollowed by remember { mutableStateOf(prefs.notifyFollowed) }
     var crash by remember { mutableStateOf<String?>(null) }
     var update by remember { mutableStateOf<Updater.Release?>(null) }
+    var whatsNew by remember { mutableStateOf<String?>(null) }
     var checking by remember { mutableStateOf(false) }
     var vibration by remember { mutableStateOf(prefs.haptics) }
     var dataSaver by remember { mutableStateOf(prefs.dataSaver) }
@@ -350,6 +351,13 @@ fun SettingsScreen(onBack: () -> Unit) {
         }
 
         SettingsSection("SOBRE")
+        ActionRow("Novidades desta versão") {
+            scope.launch {
+                val version = Updater.installedVersion(context)
+                val notes = Updater.notesFor(version)
+                if (notes == null) toast("Não consegui consultar o GitHub.") else whatsNew = Updater.plainNotes(notes)
+            }
+        }
         val repo = "https://github.com/carlosguilhe/BetterKick"
         listOf(
             "Código-fonte no GitHub" to repo,
@@ -379,6 +387,7 @@ fun SettingsScreen(onBack: () -> Unit) {
     }
 
     update?.let { release -> UpdateDialog(release, onLater = { update = null }) }
+    whatsNew?.let { notes -> WhatsNewDialog(notes) { whatsNew = null } }
 
     crash?.let { report ->
         AlertDialog(
@@ -502,13 +511,20 @@ fun HistoryScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
         } else {
             LazyColumn(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)) {
                 items(entries, key = { it.slug }) { e ->
-                    Column(Modifier.fillMaxWidth().clickable { onOpen(e.slug) }.padding(vertical = 12.dp)) {
-                        Text(e.username.ifBlank { e.slug }, fontWeight = FontWeight.Bold)
-                        Text(
-                            listOfNotNull(e.category, formatAgo(e.at)).joinToString(" • "),
-                            fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                    Row(Modifier.fillMaxWidth().clickable { onOpen(e.slug) }.padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f).padding(vertical = 6.dp)) {
+                            Text(e.username.ifBlank { e.slug }, fontWeight = FontWeight.Bold)
+                            Text(
+                                listOfNotNull(e.category, formatAgo(e.at)).joinToString(" • "),
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        // X: tira só este item do histórico.
+                        IconButton(onClick = {
+                            prefs.removeHistory(e.slug)
+                            entries = prefs.history()
+                        }) { Icon(Icons.Default.Close, tr("Remover"), tint = MaterialTheme.colorScheme.onSurfaceVariant) }
                     }
                 }
             }
