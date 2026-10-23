@@ -72,6 +72,8 @@ class FavoritesWorker(context: Context, params: WorkerParameters) : CoroutineWor
 
     private fun notify(slug: String, username: String, text: String) {
         val context = applicationContext
+        // Horário silencioso: não avisa (a live que começou nesse período não gera aviso depois).
+        if (Prefs(context).inQuietHours()) return
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) return

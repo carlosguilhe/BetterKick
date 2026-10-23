@@ -719,6 +719,7 @@ private fun CategoriesTab(
     var categories by remember { mutableStateOf<List<Category>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
+    var catQuery by rememberSaveable { mutableStateOf("") }
     val gridState = rememberLazyGridState()
     LaunchedEffect(scrollSignal) { if (scrollSignal > 0) gridState.animateScrollToItem(0) }
 
@@ -759,14 +760,29 @@ private fun CategoriesTab(
                     Text(error!!, color = MaterialTheme.colorScheme.error)
                     Button(onClick = onRefresh, modifier = Modifier.padding(top = 12.dp)) { Text("Tentar de novo") }
                 }
-                else -> LazyVerticalGrid(
-                    state = gridState,
-                    columns = GridCells.Adaptive(150.dp),
-                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = bottomInset),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    gridItems(categories, key = { it.slug }) { cat -> CategoryCard(cat, Modifier.fillMaxWidth().animateItem()) { onCategory(cat) } }
+                else -> {
+                    OutlinedTextField(
+                        value = catQuery,
+                        onValueChange = { catQuery = it },
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                        placeholder = { Text("Filtrar categorias") },
+                        singleLine = true,
+                        trailingIcon = { if (catQuery.isNotEmpty()) IconButton(onClick = { catQuery = "" }) { Icon(Icons.Default.Close, "Limpar") } },
+                        shape = RoundedCornerShape(12.dp),
+                    )
+                    val shown = categories.filter { catQuery.isBlank() || it.name.contains(catQuery, ignoreCase = true) }
+                    LazyVerticalGrid(
+                        state = gridState,
+                        columns = GridCells.Adaptive(150.dp),
+                        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = bottomInset),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        if (shown.isEmpty()) item(span = { GridItemSpan(maxLineSpan) }) {
+                            Text("Nada encontrado.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        gridItems(shown, key = { it.slug }) { cat -> CategoryCard(cat, Modifier.fillMaxWidth().animateItem()) { onCategory(cat) } }
+                    }
                 }
             }
         }

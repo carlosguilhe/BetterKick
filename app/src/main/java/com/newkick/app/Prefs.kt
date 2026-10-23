@@ -320,6 +320,28 @@ class Prefs(context: Context) {
         get() = sp.getFloat("vod_speed", 1f)
         set(v) = sp.edit().putFloat("vod_speed", v).apply()
 
+    // ---- Horário silencioso dos avisos de live ----
+
+    var quietHours: Boolean
+        get() = sp.getBoolean("quiet_hours", false)
+        set(v) = sp.edit().putBoolean("quiet_hours", v).apply()
+
+    /** Hora (0–23) em que o silêncio começa. */
+    var quietStart: Int
+        get() = sp.getInt("quiet_start", 23)
+        set(v) = sp.edit().putInt("quiet_start", v).apply()
+
+    /** Hora (0–23) em que o silêncio termina. */
+    var quietEnd: Int
+        get() = sp.getInt("quiet_end", 8)
+        set(v) = sp.edit().putInt("quiet_end", v).apply()
+
+    /** Agora está dentro do horário silencioso? (aceita intervalos que viram a meia-noite) */
+    fun inQuietHours(hour: Int = java.time.LocalTime.now().hour): Boolean {
+        if (!quietHours || quietStart == quietEnd) return false
+        return if (quietStart < quietEnd) hour in quietStart until quietEnd else hour >= quietStart || hour < quietEnd
+    }
+
     /** Tamanho do texto do chat, em % (85 a 150). */
     var chatZoom: Int
         get() = sp.getInt("chat_zoom", 100)

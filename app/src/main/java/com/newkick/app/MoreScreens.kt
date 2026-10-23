@@ -151,6 +151,9 @@ fun SettingsScreen(onBack: () -> Unit) {
     var vibration by remember { mutableStateOf(prefs.haptics) }
     var dataSaver by remember { mutableStateOf(prefs.dataSaver) }
     var batterySaver by remember { mutableStateOf(prefs.batterySaver) }
+    var quiet by remember { mutableStateOf(prefs.quietHours) }
+    var quietStart by remember { mutableIntStateOf(prefs.quietStart) }
+    var quietEnd by remember { mutableIntStateOf(prefs.quietEnd) }
     var chatZoom by remember { mutableIntStateOf(prefs.chatZoom) }
     var uiLang by remember { mutableStateOf(prefs.uiLang) }
     val haptics = rememberHaptics()
@@ -296,6 +299,21 @@ fun SettingsScreen(onBack: () -> Unit) {
             prefs.notifyFollowed = it
         }
 
+        SwitchRow("Horário silencioso", "Sem avisos de live no período abaixo", quiet) {
+            quiet = it
+            prefs.quietHours = it
+        }
+        if (quiet) {
+            ChoiceRow("Começa às", listOf(20, 21, 22, 23, 0, 1).map { "%02dh".format(it) to it }, quietStart) {
+                quietStart = it
+                prefs.quietStart = it
+            }
+            ChoiceRow("Termina às", listOf(5, 6, 7, 8, 9, 10).map { "%02dh".format(it) to it }, quietEnd) {
+                quietEnd = it
+                prefs.quietEnd = it
+            }
+        }
+
         SettingsSection("DADOS")
         ActionRow("Salvar backup dos meus dados") { exportLauncher.launch("BetterKick-backup.json") }
         ActionRow("Restaurar backup") { importLauncher.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }
@@ -327,6 +345,21 @@ fun SettingsScreen(onBack: () -> Unit) {
                     found.isFailure -> toast("Não consegui consultar o GitHub.")
                     release == null -> toast("Você está na versão mais recente.")
                     else -> update = release
+                }
+            }
+        }
+
+        SettingsSection("SOBRE")
+        val repo = "https://github.com/carlosguilhe/BetterKick"
+        listOf(
+            "Código-fonte no GitHub" to repo,
+            "Aviso legal" to "$repo/blob/main/AVISO_LEGAL.md",
+            "Política de privacidade" to "$repo/blob/main/PRIVACIDADE.md",
+            "Reportar um problema ou sugerir algo" to "$repo/issues/new",
+        ).forEach { (label, link) ->
+            ActionRow(label) {
+                runCatching {
+                    context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(link)).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
                 }
             }
         }
