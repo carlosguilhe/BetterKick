@@ -331,7 +331,7 @@ fun ProfileTab(
         }
         SpeedTestRow(Modifier.padding(horizontal = 8.dp))
         Text(
-            "BetterKick 1.4 • cliente não oficial da Kick",
+            "BetterKick ${Updater.installedVersion(context)} • cliente não oficial da Kick",
             fontSize = 12.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(start = 16.dp, top = 8.dp),

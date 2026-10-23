@@ -149,6 +149,15 @@ private fun App(linkedSlug: MutableState<String?>, linkedTab: MutableState<Strin
     val tab = MainTab.valueOf(tabName)
     var crashReport by remember { mutableStateOf(CrashLogger.pending(context)) }
 
+    // Versão nova no GitHub: confere a cada 6 h, sem travar a abertura do app.
+    var update by remember { mutableStateOf<Updater.Release?>(null) }
+    LaunchedEffect(Unit) {
+        if (System.currentTimeMillis() - prefs.lastUpdateCheck > Updater.CHECK_EVERY_MS) {
+            val found = runCatching { Updater.check(context) }.getOrNull()
+            if (found != null && found.version != prefs.skippedUpdate) update = found
+        }
+    }
+
     LaunchedEffect(linkedTab.value) {
         linkedTab.value?.let {
             tabName = it
@@ -246,6 +255,13 @@ private fun App(linkedSlug: MutableState<String?>, linkedTab: MutableState<Strin
                 onOpenHistory = { route = "history" },
                 onLoggedOut = { tabName = MainTab.HOME.name },
             )
+        }
+        // Só aparece na tela inicial, para não interromper uma live.
+        update?.takeIf { route == "home" }?.let { release ->
+            UpdateDialog(release, onLater = {
+                prefs.skippedUpdate = release.version
+                update = null
+            })
         }
         crashReport?.let { report ->
             AlertDialog(

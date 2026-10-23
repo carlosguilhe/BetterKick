@@ -141,6 +141,9 @@ fun SettingsScreen(onBack: () -> Unit) {
     var notifyFav by remember { mutableStateOf(prefs.notifyFavorites) }
     var notifyFollowed by remember { mutableStateOf(prefs.notifyFollowed) }
     var crash by remember { mutableStateOf<String?>(null) }
+    var update by remember { mutableStateOf<Updater.Release?>(null) }
+    var checking by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
     val loggedIn = remember { KickSession.hasToken }
 
     fun toast(message: String) = Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
@@ -211,19 +214,36 @@ fun SettingsScreen(onBack: () -> Unit) {
             toast("Cache limpo.")
         }
 
+        SettingsSection("ATUALIZAÇÕES")
+        ActionRow(if (checking) "Procurando atualização…" else "Procurar atualização") {
+            if (!checking) scope.launch {
+                checking = true
+                val found = runCatching { Updater.check(context) }
+                checking = false
+                val release = found.getOrNull()
+                when {
+                    found.isFailure -> toast("Não consegui consultar o GitHub.")
+                    release == null -> toast("Você está na versão mais recente.")
+                    else -> update = release
+                }
+            }
+        }
+
         SettingsSection("SUPORTE")
         ActionRow("Relatório da última falha") {
             val report = CrashLogger.pending(context)
             if (report == null) toast("Nenhuma falha registrada.") else crash = report
         }
         Text(
-            "BetterKick 1.4 • cliente não oficial da Kick\nUsa endereços não oficiais do site, que podem mudar sem aviso.",
+            "BetterKick ${Updater.installedVersion(context)} • cliente não oficial da Kick\nUsa endereços não oficiais do site, que podem mudar sem aviso.",
             fontSize = 12.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(16.dp),
         )
         Spacer(Modifier.height(24.dp).navigationBarsPadding())
     }
+
+    update?.let { release -> UpdateDialog(release, onLater = { update = null }) }
 
     crash?.let { report ->
         AlertDialog(

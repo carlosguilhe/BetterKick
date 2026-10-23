@@ -116,6 +116,16 @@ class Prefs(context: Context) {
         get() = sp.getBoolean("followed_baseline", false)
         set(v) = sp.edit().putBoolean("followed_baseline", v).apply()
 
+    /** Última vez que olhamos o GitHub atrás de versão nova (ms). */
+    var lastUpdateCheck: Long
+        get() = sp.getLong("last_update_check", 0L)
+        set(v) = sp.edit().putLong("last_update_check", v).apply()
+
+    /** Versão que o usuário já dispensou ("Depois"): não insiste até sair uma mais nova. */
+    var skippedUpdate: String
+        get() = sp.getString("skipped_update", "") ?: ""
+        set(v) = sp.edit().putString("skipped_update", v).apply()
+
     var askedNotifications: Boolean
         get() = sp.getBoolean("asked_notifications", false)
         set(v) = sp.edit().putBoolean("asked_notifications", v).apply()
