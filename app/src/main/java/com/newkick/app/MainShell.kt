@@ -531,12 +531,12 @@ private fun HomeTab(
                 ) {
                     val hot = lives.take(5)
                     val rest = lives.drop(5)
-                    if (hot.isNotEmpty()) {
+                    if (hot.isNotEmpty() && prefs.homeSection("hot")) {
                         item { SectionTitle("Em alta agora") }
                         item { FeaturedCarousel(hot, onOpen) { onLongPress(ChannelTarget(it.slug, it.username)) } }
                     }
                     val liveFollowed = followed.list.filter { it.isLive }
-                    if (loggedIn && liveFollowed.isNotEmpty()) {
+                    if (loggedIn && liveFollowed.isNotEmpty() && prefs.homeSection("following")) {
                         item { SectionTitle("Seguindo ao vivo") }
                         item {
                             LazyRow(contentPadding = PaddingValues(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -546,7 +546,7 @@ private fun HomeTab(
                     }
                     // Clipes e transmissões que você parou no meio.
                 
-                    if (continueItems.isNotEmpty()) {
+                    if (continueItems.isNotEmpty() && prefs.homeSection("continue")) {
                         item { SectionTitle("Continuar assistindo") }
                         item {
                             LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -554,7 +554,7 @@ private fun HomeTab(
                             }
                         }
                     }
-                    if (recommended.isNotEmpty()) {
+                    if (recommended.isNotEmpty() && prefs.homeSection("recommended")) {
                         item { SectionTitle("Recomendado para você") }
                         item {
                             LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -568,7 +568,7 @@ private fun HomeTab(
                         }
                     }
                     val chips = (favorites + recents).distinct().take(12)
-                    if (chips.isNotEmpty()) {
+                    if (chips.isNotEmpty() && prefs.homeSection("favorites")) {
                         item { SectionTitle("Favoritos e recentes") }
                         item {
                             LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -576,7 +576,7 @@ private fun HomeTab(
                             }
                         }
                     }
-                    if (categories.isNotEmpty()) {
+                    if (categories.isNotEmpty() && prefs.homeSection("categories")) {
                         item { SectionTitle("Categorias populares") }
                         item {
                             LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -586,7 +586,7 @@ private fun HomeTab(
                             }
                         }
                     }
-                    if (rest.isNotEmpty()) {
+                    if (rest.isNotEmpty() && prefs.homeSection("more")) {
                         item { SectionTitle("Mais lives") }
                         items(rest, key = { "m_" + it.slug }) { live ->
                             Box(Modifier.padding(horizontal = 16.dp, vertical = 6.dp).animateItem()) {
@@ -772,6 +772,9 @@ private fun FollowingTab(
     var search by remember { mutableStateOf("") }
     var mode by remember { mutableIntStateOf(0) } // 0 = todos, 1 = ao vivo, 2 = offline
     var listFilter by remember { mutableStateOf<String?>(null) }
+    val sortContext = androidx.compose.ui.platform.LocalContext.current
+    val sortPrefs = remember { Prefs(sortContext) }
+    var alphaSort by remember { mutableStateOf(sortPrefs.followedAlpha) }
 
     Column(Modifier.fillMaxSize().statusBarsPadding()) {
         val live = state.list.count { it.isLive }
@@ -806,6 +809,7 @@ private fun FollowingTab(
                     listOf("Todos", "Ao vivo", "Offline").forEachIndexed { i, label ->
                         FilterChip(selected = mode == i, onClick = { mode = i }, label = { Text(label) })
                     }
+                    FilterChip(selected = alphaSort, onClick = { alphaSort = !alphaSort; sortPrefs.followedAlpha = alphaSort }, label = { Text("A–Z") })
                 }
                 // Suas listas (criadas pelo menu de segurar um canal → "Adicionar a uma lista").
                 val listContext = androidx.compose.ui.platform.LocalContext.current
@@ -832,7 +836,7 @@ private fun FollowingTab(
                     (search.isBlank() || ch.username.contains(search, ignoreCase = true) || ch.slug.contains(search, ignoreCase = true)) &&
                         (listFilter == null || ch.slug in channelLists[listFilter].orEmpty()) &&
                         when (mode) { 1 -> ch.isLive; 2 -> !ch.isLive; else -> true }
-                }
+                }.let { list -> if (alphaSort) list.sortedBy { it.username.lowercase() } else list }
                 PullRefresh(onRefresh = onRefresh) {
                     val liveList = filtered.filter { it.isLive }
                     val offline = filtered.filter { !it.isLive }

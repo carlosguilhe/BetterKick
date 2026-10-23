@@ -307,6 +307,9 @@ private val DICTIONARY: Map<String, Pair<String, String>> = listOf(
     e("Lives ao vivo", "Live now", "En vivo ahora"),
     // Textos com valores no meio (usados com .format, para nunca mexer em texto de terceiros)
     e("Mais ações", "More actions", "Más acciones"),
+    e("Ver mais", "See more", "Ver más"),
+    e("Ver menos", "See less", "Ver menos"),
+    e("TELA INICIAL", "HOME SCREEN", "PANTALLA DE INICIO"),
     e("Continuar assistindo", "Continue watching", "Seguir viendo"),
     e("Buscar nos vídeos deste canal", "Search this channel's videos", "Buscar en los vídeos de este canal"),
     e("Excluir lista", "Delete list", "Eliminar lista"),

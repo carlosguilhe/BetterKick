@@ -315,6 +315,22 @@ class Prefs(context: Context) {
         sp.edit().putString("vod_positions", JSONArray(list).toString()).apply()
     }
 
+    /** Velocidade que você usa em clipes e transmissões (lembrada entre vídeos). */
+    var vodSpeed: Float
+        get() = sp.getFloat("vod_speed", 1f)
+        set(v) = sp.edit().putFloat("vod_speed", v).apply()
+
+    // ---- Seções da Home e ordem de Seguindo ----
+
+    fun homeSection(name: String): Boolean = sp.getBoolean("home_$name", true)
+
+    fun setHomeSection(name: String, visible: Boolean) = sp.edit().putBoolean("home_$name", visible).apply()
+
+    /** Seguindo em ordem alfabética (em vez de por espectadores). */
+    var followedAlpha: Boolean
+        get() = sp.getBoolean("followed_alpha", false)
+        set(v) = sp.edit().putBoolean("followed_alpha", v).apply()
+
     // ---- Economia de dados ----
 
     /** Em rede móvel (4G/5G), limita o modo automático a 480p. */

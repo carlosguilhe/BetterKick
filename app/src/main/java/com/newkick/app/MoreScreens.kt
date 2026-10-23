@@ -6,6 +6,7 @@ import android.content.res.Configuration
 import android.view.ViewGroup
 import androidx.activity.compose.BackHandler
 import androidx.annotation.OptIn
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -256,6 +257,23 @@ fun SettingsScreen(onBack: () -> Unit) {
         ChoiceRow("Idioma das listas", listOf("PT" to "pt", "EN" to "en", "ES" to "es", "Todos" to "all"), lang) {
             lang = it
             prefs.lang = it
+        }
+
+        SettingsSection("TELA INICIAL")
+        listOf(
+            "hot" to "Em alta agora",
+            "following" to "Seguindo ao vivo",
+            "continue" to "Continuar assistindo",
+            "recommended" to "Recomendado para você",
+            "favorites" to "Favoritos e recentes",
+            "categories" to "Categorias populares",
+            "more" to "Mais lives",
+        ).forEach { (key, label) ->
+            var shown by remember { mutableStateOf(prefs.homeSection(key)) }
+            SwitchRow(label, null, shown) {
+                shown = it
+                prefs.setHomeSection(key, it)
+            }
         }
 
         SettingsSection("AVISOS")
@@ -580,6 +598,7 @@ fun ChannelScreen(slug: String, onBack: () -> Unit, onWatchLive: () -> Unit, onP
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     var query by remember { mutableStateOf("") }
+    var bioOpen by remember { mutableStateOf(false) }
     val loggedIn = remember { KickSession.hasToken }
     var following by remember { mutableStateOf<Boolean?>(null) }
     var followBusy by remember { mutableStateOf(false) }
@@ -671,7 +690,23 @@ fun ChannelScreen(slug: String, onBack: () -> Unit, onWatchLive: () -> Unit, onP
                                     )
                                 }
                             }
-                            p.bio?.let { Text(it, fontSize = 13.sp, maxLines = 4, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 10.dp)) }
+                            p.bio?.let {
+                                // Toque para abrir a bio inteira (ou recolher).
+                                Text(
+                                    it,
+                                    fontSize = 13.sp,
+                                    maxLines = if (bioOpen) Int.MAX_VALUE else 4,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.padding(top = 10.dp).animateContentSize().clickable { bioOpen = !bioOpen },
+                                )
+                                if (it.length > 140) Text(
+                                    if (bioOpen) "Ver menos" else "Ver mais",
+                                    color = KickGreen,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.clickable { bioOpen = !bioOpen }.padding(top = 2.dp),
+                                )
+                            }
                             if (p.isLive) Button(onClick = onWatchLive, modifier = Modifier.padding(top = 12.dp)) { Text("Assistir ao vivo agora") }
                             else Text("Offline no momento", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp, modifier = Modifier.padding(top = 10.dp))
                             Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -807,7 +842,8 @@ fun VodPlayerScreen(url: String, title: String, onBack: () -> Unit) {
         player.addListener(listener)
         onDispose { player.removeListener(listener) }
     }
-    var speed by remember { mutableStateOf(1f) }
+    var speed by remember { mutableStateOf(prefs.vodSpeed) }
+    LaunchedEffect(player) { player.setPlaybackSpeed(speed) }
     var speedMenu by remember { mutableStateOf(false) }
     // Pulo de 10 s por duplo toque: true = para frente. O contador reinicia a animação a cada toque.
     var seekFlash by remember { mutableStateOf<Pair<Boolean, Int>?>(null) }
@@ -920,6 +956,7 @@ fun VodPlayerScreen(url: String, title: String, onBack: () -> Unit) {
                             onClick = {
                                 speed = s
                                 player.setPlaybackSpeed(s)
+                                prefs.vodSpeed = s
                                 speedMenu = false
                             },
                         )
