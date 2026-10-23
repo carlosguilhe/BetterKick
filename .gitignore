@@ -1,0 +1,17 @@
+.gradle/
+build/
+app/build/
+local.properties
+.idea/
+*.iml
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Chaves de assinatura e senhas nunca entram no repositório
+*.jks
+*.keystore
+keystore.properties
+
+# O APK vai nos Releases, não no código
+*.apk

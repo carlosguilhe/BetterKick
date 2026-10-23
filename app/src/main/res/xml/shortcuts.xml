@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="following"
+        android:enabled="true"
+        android:icon="@drawable/ic_kick_k"
+        android:shortcutShortLabel="@string/shortcut_following"
+        android:shortcutLongLabel="@string/shortcut_following_long">
+        <intent
+            android:action="com.newkick.app.OPEN_TAB"
+            android:targetClass="com.newkick.app.MainActivity"
+            android:targetPackage="com.newkick.app">
+            <extra android:name="tab" android:value="FOLLOWING" />
+        </intent>
+    </shortcut>
+    <shortcut
+        android:shortcutId="featured"
+        android:enabled="true"
+        android:icon="@drawable/ic_kick_k"
+        android:shortcutShortLabel="@string/shortcut_featured"
+        android:shortcutLongLabel="@string/shortcut_featured_long">
+        <intent
+            android:action="com.newkick.app.OPEN_TAB"
+            android:targetClass="com.newkick.app.MainActivity"
+            android:targetPackage="com.newkick.app">
+            <extra android:name="tab" android:value="FEATURED" />
+        </intent>
+    </shortcut>
+    <shortcut
+        android:shortcutId="categories"
+        android:enabled="true"
+        android:icon="@drawable/ic_kick_k"
+        android:shortcutShortLabel="@string/shortcut_categories"
+        android:shortcutLongLabel="@string/shortcut_categories_long">
+        <intent
+            android:action="com.newkick.app.OPEN_TAB"
+            android:targetClass="com.newkick.app.MainActivity"
+            android:targetPackage="com.newkick.app">
+            <extra android:name="tab" android:value="CATEGORIES" />
+        </intent>
+    </shortcut>
+</shortcuts>

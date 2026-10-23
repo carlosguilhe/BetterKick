@@ -1,0 +1,10 @@
+<resources>
+    <string name="app_name">BetterKick</string>
+    <string name="notification_channel_playback">Reprodução ao vivo</string>
+    <string name="shortcut_following">Seguindo</string>
+    <string name="shortcut_following_long">Quem eu sigo</string>
+    <string name="shortcut_featured">Destaques</string>
+    <string name="shortcut_featured_long">Lives em destaque</string>
+    <string name="shortcut_categories">Categorias</string>
+    <string name="shortcut_categories_long">Categorias</string>
+</resources>
